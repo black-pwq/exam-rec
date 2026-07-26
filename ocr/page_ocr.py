@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from collections import OrderedDict
 from collections.abc import Iterable, Iterator, Sequence
 from os import PathLike, fspath
@@ -9,10 +8,11 @@ from typing import Any, Protocol, TypeAlias
 
 import pymupdf
 
+from app_logging import get_logger
 from ocr.base_ocr import BaseOcr, OcrElement
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 OcrPage: TypeAlias = list[OcrElement]
 PdfInput: TypeAlias = str | PathLike[str] | bytes | bytearray | memoryview

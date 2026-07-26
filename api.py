@@ -12,6 +12,7 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, Response, Uplo
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from app_logging import configure_logging
 from recognition_jobs import (
     DefaultRecognitionProcessor,
     JobNotCompleteError,
@@ -64,6 +65,7 @@ def create_app(
     service: RecognitionService | None = None,
     settings: ApiSettings | None = None,
 ) -> FastAPI:
+    configure_logging()
     configured = settings or ApiSettings.from_env()
     supplied_service = service
 

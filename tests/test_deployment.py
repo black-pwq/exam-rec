@@ -105,7 +105,9 @@ def test_container_uses_env_key_and_runs_as_unprivileged_user() -> None:
 
     assert "USER examrec" in dockerfile
     assert "gosu" not in dockerfile
+    assert "app_logging.py" in dockerfile
     assert 'ENTRYPOINT ["/app/deploy/entrypoint.sh"]' in dockerfile
     assert 'exec "$@"' in entrypoint
     assert "\nsecrets:" not in compose
     assert "EXAM_REC_LLM_API_KEY=" in environment
+    assert "EXAM_REC_LOG_LEVEL=INFO" in environment

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from os import PathLike, fspath
@@ -10,11 +9,12 @@ from typing import Any, Protocol
 
 import pymupdf
 
+from app_logging import get_logger
 from extractor.base_extractor import RawTextExtractor
 from ocr.page_ocr import PageOcr
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class QuestionRangeResolutionError(RuntimeError):

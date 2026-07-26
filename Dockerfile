@@ -64,6 +64,7 @@ COPY --from=builder --chown=examrec:examrec /app/.venv /app/.venv
 RUN python -c "import cv2; print('OpenCV', cv2.__version__)"
 
 COPY --chown=examrec:examrec \
+    app_logging.py \
     api.py \
     pipeline.py \
     question_range.py \

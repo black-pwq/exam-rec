@@ -46,6 +46,8 @@ chmod 600 deploy/.env.production
 - 设置实际的 `EXAM_REC_LLM_API_KEY`、`EXAM_REC_LLM_BASE_URL` 和
   `EXAM_REC_LLM_MODEL`。
 - 根据磁盘和处理能力调整上传、页数、排队数及 CPU 线程数限制。
+- `EXAM_REC_LOG_LEVEL` 默认是 `INFO`，可设为 `DEBUG`、`WARNING`、`ERROR`
+  或 `CRITICAL`。
 
 `deploy/.env.production` 已被 Git 忽略，必须保持 `0600` 权限。密钥会作为容器环境
 变量传入，因此拥有 Docker 管理权限的用户可以通过容器检查命令读取；本方案假定 Docker
@@ -101,7 +103,15 @@ GPU 部署的直接 Compose 命令需要额外添加：
 - `/health` 保留原有兼容行为，无论 worker 是否可用都返回 200，客户端需要检查
   JSON 状态。
 
-容器日志采用 Docker `json-file` 驱动，每个文件最大 50 MB，保留 5 个文件。
+应用日志以单行文本写到 stdout，包含识别服务和任务的关键生命周期；Uvicorn 请求日志
+也位于 `app` 容器，Nginx 访问日志位于 `proxy` 容器。持续查看两者：
+
+```bash
+docker compose --env-file deploy/.env.production logs -f app proxy
+```
+
+容器日志采用 Docker `json-file` 驱动，每个文件最大 50 MB，保留 5 个文件。任务的
+`events.jsonl` 仍是持久化状态记录，不会被应用日志替代。
 
 ## 5. 更新和回滚
 

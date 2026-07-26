@@ -7,6 +7,7 @@ import queue
 import re
 import shutil
 import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
 
+from app_logging import get_logger
 from extractor.regex_extractor import LlmRegexAnalyzer
 from ocr.ocr_factory import OcrFactory, OcrRegistry
 from ocr.page_ocr import PdfPageSource
@@ -29,6 +31,8 @@ from question_range import (
     QuestionRangeResolver,
 )
 
+
+logger = get_logger(__name__)
 
 _JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _INTERRUPTIBLE_STATUSES = {"queued", "running", "cancelling"}
@@ -513,6 +517,11 @@ class RecognitionService:
             raise RuntimeError(
                 f"failed to start recognition worker: {self._startup_error}"
             ) from self._startup_error
+        logger.info(
+            "Recognition service started job_root=%s max_queued_jobs=%d",
+            self.store.root,
+            self.max_queued_jobs,
+        )
 
     def submit(self, job_id: str) -> None:
         if not self.running:
@@ -525,10 +534,20 @@ class RecognitionService:
         except queue.Full:
             with self._state_lock:
                 self._cancellations.pop(job_id, None)
+            logger.warning(
+                "Recognition queue full job_id=%s max_queued_jobs=%d",
+                job_id,
+                self.max_queued_jobs,
+            )
             raise JobQueueFullError("recognition queue is full") from None
+        logger.info(
+            "Recognition job queued job_id=%s queue_size=%d",
+            job_id,
+            self._queue.qsize(),
+        )
 
     def delete(self, job_id: str) -> bool:
-        self.store.get_status(job_id)
+        status = self.store.get_status(job_id)
         with self._state_lock:
             cancellation = self._cancellations.get(job_id)
             is_running = self._current_job_id == job_id
@@ -539,8 +558,17 @@ class RecognitionService:
         if is_running:
             self.store.update_status(job_id, "cancelling")
             self.store.append_event(job_id, "cancellation_requested")
+            logger.info(
+                "Recognition job cancellation requested job_id=%s",
+                job_id,
+            )
             return False
         self.store.delete(job_id)
+        logger.info(
+            "Recognition job deleted job_id=%s previous_status=%s",
+            job_id,
+            status["status"],
+        )
         return True
 
     def stop(self) -> None:
@@ -549,9 +577,14 @@ class RecognitionService:
             if thread is None:
                 self._instance_lock.release()
                 return
+            active_job_id = self._current_job_id
             self._stop.set()
             for cancellation in self._cancellations.values():
                 cancellation.set()
+        logger.info(
+            "Recognition service stopping active_job_id=%s",
+            active_job_id or "none",
+        )
         try:
             self._queue.put_nowait(None)
         except queue.Full:
@@ -560,6 +593,7 @@ class RecognitionService:
             thread.join()
         self.store.mark_unfinished_interrupted()
         self._instance_lock.release()
+        logger.info("Recognition service stopped job_root=%s", self.store.root)
 
     def _worker_main(self) -> None:
         processor: RecognitionProcessor | None = None
@@ -568,6 +602,10 @@ class RecognitionService:
                 processor = self.processor_factory()
             except BaseException as error:
                 self._startup_error = error
+                logger.exception(
+                    "Recognition service startup failed job_root=%s",
+                    self.store.root,
+                )
                 return
             finally:
                 self._ready.set()
@@ -588,6 +626,9 @@ class RecognitionService:
                     close()
 
     def _run_job(self, processor: RecognitionProcessor, job_id: str) -> None:
+        started_at = time.monotonic()
+        processed_pages = 0
+        problems: list[dict[str, Any]] = []
         with self._state_lock:
             cancellation = self._cancellations.get(job_id)
             self._current_job_id = job_id
@@ -606,9 +647,8 @@ class RecognitionService:
 
             self.store.update_status(job_id, "running")
             self.store.append_event(job_id, "started")
+            logger.info("Recognition job started job_id=%s", job_id)
             iterator = iter(processor.process_iter(self.store.input_path(job_id)))
-            processed_pages = 0
-            problems: list[dict[str, Any]] = []
             for page in iterator:
                 if cancellation.is_set() or self._stop.is_set():
                     raise _JobCancelled
@@ -624,10 +664,29 @@ class RecognitionService:
             if cancellation.is_set() or self._stop.is_set():
                 raise _JobCancelled
             self.store.complete(job_id, problems)
+            logger.info(
+                "Recognition job completed job_id=%s processed_pages=%d "
+                "problem_count=%d duration_seconds=%.3f",
+                job_id,
+                processed_pages,
+                len(problems),
+                time.monotonic() - started_at,
+            )
         except _JobCancelled:
             if self._job_exists(job_id):
                 self.store.mark_cancelled(job_id)
+                logger.info(
+                    "Recognition job cancelled job_id=%s "
+                    "duration_seconds=%.3f",
+                    job_id,
+                    time.monotonic() - started_at,
+                )
         except Exception as error:
+            logger.exception(
+                "Recognition job failed job_id=%s duration_seconds=%.3f",
+                job_id,
+                time.monotonic() - started_at,
+            )
             if self._job_exists(job_id):
                 self.store.fail(job_id, error)
         finally:
@@ -646,6 +705,10 @@ class RecognitionService:
                 self._current_job_id = None
         if delete_requested and self._job_exists(job_id):
             self.store.delete(job_id)
+            logger.info(
+                "Recognition job deleted job_id=%s previous_status=cancelled",
+                job_id,
+            )
 
     def _job_exists(self, job_id: str) -> bool:
         try:

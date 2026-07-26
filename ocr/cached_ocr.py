@@ -1,14 +1,14 @@
 import json
-import logging
 from collections.abc import Iterator
 from os import PathLike
 from pathlib import Path
 from typing import Any
 
+from app_logging import get_logger
 from ocr.base_ocr import PERSISTENCE_VERSION, BaseOcr, OcrElement, Point
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CachedOcr(BaseOcr):

@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import re
 from collections.abc import Iterable, Iterator, Mapping
@@ -7,12 +6,13 @@ from dataclasses import dataclass
 from itertools import chain
 from typing import Any
 
+from app_logging import get_logger
 from extractor.base_extractor import OcrPage, Problem, ProblemExtractor, RawTextExtractor
 from ocr.base_ocr import OcrElement
 from transform import cluster_ocr_elements_by_x
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HuaShengRegexExtractor(ProblemExtractor):
