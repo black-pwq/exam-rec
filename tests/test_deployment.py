@@ -83,3 +83,12 @@ def test_drain_check_only_reports_active_jobs(tmp_path: Path) -> None:
         {"job_id": "b" * 32, "status": "running"},
         {"job_id": "c" * 32, "status": "queued"},
     ]
+
+
+def test_runtime_image_installs_and_import_checks_opencv() -> None:
+    dockerfile = (
+        Path(__file__).parents[1] / "Dockerfile"
+    ).read_text(encoding="utf-8")
+
+    assert "libgl1" in dockerfile
+    assert 'import cv2; print(' in dockerfile

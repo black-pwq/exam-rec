@@ -42,6 +42,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
+        libgl1 \
         libglib2.0-0 \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
@@ -59,6 +60,9 @@ RUN apt-get update \
 WORKDIR /app
 
 COPY --from=builder --chown=examrec:examrec /app/.venv /app/.venv
+
+RUN python -c "import cv2; print('OpenCV', cv2.__version__)"
+
 COPY --chown=examrec:examrec \
     api.py \
     pipeline.py \
