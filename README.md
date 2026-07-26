@@ -24,9 +24,9 @@ uv run --no-sync pytest
 
 ## Production
 
-Production deployment uses Docker Compose, one Uvicorn process, an Nginx
-reverse proxy, and persistent volumes for jobs and PaddleOCR models. CPU and
-CUDA 11.8 images are built from the same lockfile.
+Production deployment uses Docker Compose, one directly published Uvicorn
+process, and persistent volumes for jobs and PaddleOCR models. CPU and CUDA
+11.8 images are built from the same lockfile.
 
 ```bash
 cp deploy/env.production.example deploy/.env.production

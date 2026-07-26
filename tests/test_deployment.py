@@ -99,6 +99,7 @@ def test_container_uses_env_key_and_runs_as_unprivileged_user() -> None:
     dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
     entrypoint = (root / "deploy/entrypoint.sh").read_text(encoding="utf-8")
     compose = (root / "compose.yaml").read_text(encoding="utf-8")
+    release = (root / "deploy/release.sh").read_text(encoding="utf-8")
     environment = (
         root / "deploy/env.production.example"
     ).read_text(encoding="utf-8")
@@ -108,6 +109,15 @@ def test_container_uses_env_key_and_runs_as_unprivileged_user() -> None:
     assert "app_logging.py" in dockerfile
     assert 'ENTRYPOINT ["/app/deploy/entrypoint.sh"]' in dockerfile
     assert 'exec "$@"' in entrypoint
+    assert "--proxy-headers" not in entrypoint
     assert "\nsecrets:" not in compose
+    assert "\n  proxy:" not in compose
+    assert "nginx" not in compose.lower()
+    assert (
+        '"${EXAM_REC_BIND_IP:-127.0.0.1}:${EXAM_REC_PORT:-8080}:8000"'
+        in compose
+    )
+    assert "compose exec --no-TTY app python -m deploy.healthcheck" in release
     assert "EXAM_REC_LLM_API_KEY=" in environment
     assert "EXAM_REC_LOG_LEVEL=INFO" in environment
+    assert "NGINX_" not in environment

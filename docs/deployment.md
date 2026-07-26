@@ -9,12 +9,12 @@
 
 ```text
 可信内网客户端
-      │ HTTP
+      │ HTTP :8080
       ▼
-Nginx :8080
-      │ Compose 网络
+Docker 端口映射
+      │
       ▼
-Uvicorn :8000（1 个进程）
+Uvicorn :8000（1 个进程，直接对外提供 API）
       ├── jobs 卷：上传文件、状态、事件和结果
       └── models 卷：PaddleOCR 模型缓存
 ```
@@ -53,8 +53,7 @@ chmod 600 deploy/.env.production
 变量传入，因此拥有 Docker 管理权限的用户可以通过容器检查命令读取；本方案假定 Docker
 权限只授予可信管理员。
 
-Nginx 默认限制请求体为 500 MB。提高 `EXAM_REC_MAX_UPLOAD_BYTES` 时，必须同步提高
-`NGINX_CLIENT_MAX_BODY_SIZE`，否则请求会先被 Nginx 拒绝。
+上传大小由应用的 `EXAM_REC_MAX_UPLOAD_BYTES` 限制。
 
 ## 3. 首次部署
 
@@ -73,8 +72,8 @@ Nginx 默认限制请求体为 500 MB。提高 `EXAM_REC_MAX_UPLOAD_BYTES` 时�
 1. 根据 `uv.lock` 构建 `exam-rec:<git-sha>-cpu` 或 `-gpu` 镜像。
 2. 验证任务卷、模型卷、LLM 配置和 Paddle 运行时。
 3. 在持久模型卷中完成一次最小 OCR 预热。
-4. 启动一个 Uvicorn 进程和 Nginx。
-5. 等待 `/health/ready` 就绪并从 Nginx 容器执行健康检查。
+4. 启动一个 Uvicorn 进程并将配置的宿主机端口直接映射到容器。
+5. 等待 `/health/ready` 就绪并从应用容器执行健康检查。
 
 GPU 预检要求 Paddle 是 CUDA 构建且至少有一张可见 GPU；CPU 镜像如果误装了 CUDA
 Paddle 也会拒绝启动，不会静默回退。
@@ -85,7 +84,7 @@ Paddle 也会拒绝启动，不会静默回退。
 
 ```bash
 docker compose --env-file deploy/.env.production ps
-docker compose --env-file deploy/.env.production logs --tail 200 app proxy
+docker compose --env-file deploy/.env.production logs --tail 200 app
 curl http://SERVER_LAN_IP:8080/health/live
 curl http://SERVER_LAN_IP:8080/health/ready
 ```
@@ -104,10 +103,10 @@ GPU 部署的直接 Compose 命令需要额外添加：
   JSON 状态。
 
 应用日志以单行文本写到 stdout，包含识别服务和任务的关键生命周期；Uvicorn 请求日志
-也位于 `app` 容器，Nginx 访问日志位于 `proxy` 容器。持续查看两者：
+也位于 `app` 容器。持续查看：
 
 ```bash
-docker compose --env-file deploy/.env.production logs -f app proxy
+docker compose --env-file deploy/.env.production logs -f app
 ```
 
 容器日志采用 Docker `json-file` 驱动，每个文件最大 50 MB，保留 5 个文件。任务的
@@ -153,12 +152,13 @@ docker compose --env-file deploy/.env.production -f compose.yaml start
 
 更新服务器源码到目标提交后，重新运行对应的 `release.sh`。脚本首先构建新镜像，然后：
 
-1. 优雅停止 Nginx，等待已开始的上传结束并阻止新任务进入。
-2. 最多等待一小时，直到所有 `queued`、`running` 和 `cancelling` 任务结束。
-3. 优雅停止旧应用，预热新镜像并启动新版本。
+1. 最多等待一小时，直到所有 `queued`、`running` 和 `cancelling` 任务结束。
+2. 优雅停止旧应用，预热新镜像并启动新版本。
+3. 等待新应用通过容器内健康检查。
 
-部署期间会有短暂不可用时间。不要在任务活跃时手动执行 `docker compose down`；强制重启
-会使未完成任务变成 `interrupted`，且不会自动恢复。
+应用端口直接对外提供服务，发布脚本等待任务排空期间仍可能收到新任务。因此升级前应先
+暂停调用方提交任务。部署期间会有短暂不可用时间。不要在任务活跃时手动执行
+`docker compose down`；强制重启会使未完成任务变成 `interrupted`，且不会自动恢复。
 
 新版本未能健康启动时，发布脚本会自动恢复升级前的镜像。需要主动回滚时，将源码切换到
 目标提交并重新执行 `release.sh`；任务卷和模型卷不会被替换。

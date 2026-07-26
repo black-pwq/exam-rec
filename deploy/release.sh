@@ -58,6 +58,7 @@ docker build \
     .
 
 previous_image=""
+rollback_enabled=false
 app_id="$(compose ps --quiet app)"
 if [ -n "$app_id" ]; then
     previous_image="$(docker inspect --format '{{.Config.Image}}' "$app_id")"
@@ -66,7 +67,9 @@ fi
 rollback() {
     exit_code=$?
     trap - EXIT INT TERM
-    if [ "$exit_code" -ne 0 ] && [ -n "$previous_image" ]; then
+    if [ "$exit_code" -ne 0 ] \
+        && [ "$rollback_enabled" = true ] \
+        && [ -n "$previous_image" ]; then
         echo "release failed; restoring $previous_image" >&2
         EXAM_REC_IMAGE="$previous_image"
         export EXAM_REC_IMAGE
@@ -76,22 +79,28 @@ rollback() {
 }
 trap rollback EXIT INT TERM
 
-proxy_id="$(compose ps --quiet proxy)"
-if [ -n "$proxy_id" ]; then
-    if ! compose exec --no-TTY proxy nginx -s quit; then
-        compose stop proxy
-    fi
-    docker wait "$proxy_id" >/dev/null
-fi
-
 if [ -n "$app_id" ]; then
+    echo "waiting for active jobs; keep new submissions paused" >&2
     compose run \
         --rm \
         --no-deps \
         app \
         python -m deploy.drain_check --wait --timeout 3600 --interval 5
+    rollback_enabled=true
     compose stop app
 fi
+
+# Remove the proxy container left by releases made before Nginx was removed.
+legacy_proxy_ids="$(
+    docker ps \
+        --all \
+        --quiet \
+        --filter label=com.docker.compose.project=exam-rec \
+        --filter label=com.docker.compose.service=proxy
+)"
+for legacy_proxy_id in $legacy_proxy_ids; do
+    docker rm --force "$legacy_proxy_id"
+done
 
 compose run --rm --no-deps app python -m deploy.warmup
 compose up --detach --no-build --remove-orphans
@@ -106,11 +115,7 @@ while [ "$attempt" -lt 60 ]; do
                 "$app_id"
         )"
         if [ "$health" = "healthy" ]; then
-            compose exec \
-                --no-TTY \
-                proxy \
-                wget -q -O - http://127.0.0.1/health/ready
-            echo
+            compose exec --no-TTY app python -m deploy.healthcheck
             compose ps
             trap - EXIT INT TERM
             echo "deployed $image"

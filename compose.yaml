@@ -18,8 +18,8 @@ services:
     volumes:
       - jobs:/data/jobs
       - models:/data/models
-    expose:
-      - "8000"
+    ports:
+      - "${EXAM_REC_BIND_IP:-127.0.0.1}:${EXAM_REC_PORT:-8080}:8000"
     init: true
     restart: unless-stopped
     stop_grace_period: 10m
@@ -34,44 +34,6 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
-    networks:
-      - backend
-
-  proxy:
-    image: nginx:1.30.4-alpine3.24
-    depends_on:
-      app:
-        condition: service_healthy
-    environment:
-      NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-500m}
-      NGINX_ENVSUBST_FILTER: ^NGINX_
-    ports:
-      - "${EXAM_REC_BIND_IP:-127.0.0.1}:${EXAM_REC_PORT:-8080}:80"
-    volumes:
-      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
-    init: true
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget -q -O - http://127.0.0.1/health/ready | grep -q '\"status\":\"ready\"'",
-        ]
-      interval: 15s
-      timeout: 5s
-      start_period: 10s
-      retries: 4
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "5"
-    networks:
-      - backend
-
-networks:
-  backend:
-    driver: bridge
 
 volumes:
   jobs:
