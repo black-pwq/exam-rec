@@ -131,4 +131,23 @@ def test_rejects_invalid_and_oversized_pdfs(tmp_path: Path) -> None:
         )
         assert too_many_pages.status_code == 413
 
-    assert list(tmp_path.iterdir()) == []
+    assert list(tmp_path.glob("[!.]*")) == []
+
+
+def test_health_endpoints_distinguish_liveness_and_readiness(
+    tmp_path: Path,
+) -> None:
+    with make_client(tmp_path) as client:
+        assert client.get("/health").json() == {"status": "ok"}
+        assert client.get("/health/live").json() == {"status": "ok"}
+        ready = client.get("/health/ready")
+        assert ready.status_code == 200
+        assert ready.json() == {"status": "ready"}
+
+        client.app.state.recognition_service.stop()
+
+        assert client.get("/health").json() == {"status": "unavailable"}
+        assert client.get("/health/live").status_code == 200
+        unavailable = client.get("/health/ready")
+        assert unavailable.status_code == 503
+        assert unavailable.json() == {"status": "unavailable"}

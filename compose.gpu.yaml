@@ -1,0 +1,17 @@
+services:
+  app:
+    image: ${EXAM_REC_IMAGE:-exam-rec:local-gpu}
+    build:
+      args:
+        PADDLE_GROUP: paddle-cu118
+    environment:
+      EXAM_REC_RUNTIME: gpu
+      PADDLE_PDX_DISABLE_DEVICE_FALLBACK: "True"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities:
+                - gpu

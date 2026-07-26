@@ -9,6 +9,7 @@ from typing import Any
 
 import pymupdf
 from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from recognition_jobs import (
@@ -87,6 +88,20 @@ def create_app(
     async def health(request: Request) -> dict[str, Any]:
         recognition = _service(request)
         return {"status": "ok" if recognition.running else "unavailable"}
+
+    @app.get("/health/live")
+    async def health_live() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/health/ready")
+    async def health_ready(request: Request) -> Response:
+        recognition = _service(request)
+        if recognition.running:
+            return JSONResponse({"status": "ready"})
+        return JSONResponse(
+            {"status": "unavailable"},
+            status_code=503,
+        )
 
     @app.post("/recognitions", status_code=202)
     async def create_recognition(

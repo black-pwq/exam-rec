@@ -65,6 +65,37 @@ Content-Type: application/json
 注意：当前健康检查无论 worker 是否可用都返回 HTTP 200，客户端或部署平台需要检查
 JSON 中的 `status`。
 
+### `GET /health/live`
+
+Web 进程能够响应请求时返回 HTTP 200：
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### `GET /health/ready`
+
+识别 worker 可接受任务时返回 HTTP 200：
+
+```json
+{
+  "status": "ready"
+}
+```
+
+worker 不可用时返回 HTTP 503：
+
+```json
+{
+  "status": "unavailable"
+}
+```
+
+容器和反向代理应使用 `/health/ready` 作为就绪检查；`/health/live` 只用于判断
+Web 进程是否存活。
+
 ## 4. 上传并创建任务
 
 ### `POST /recognitions`
@@ -569,9 +600,15 @@ var/jobs/<job_id>/
 识别 worker 必须配置：
 
 ```text
-EXAM_REC_LLM_API_KEY
 EXAM_REC_LLM_BASE_URL
 EXAM_REC_LLM_MODEL
+```
+
+LLM API 密钥必须通过以下两种方式之一配置，不能同时设置：
+
+```text
+EXAM_REC_LLM_API_KEY
+EXAM_REC_LLM_API_KEY_FILE=/run/secrets/llm_api_key
 ```
 
 可选配置：
@@ -588,6 +625,9 @@ EXAM_REC_MAX_QUEUED_JOBS=32
 ```bash
 uv run uvicorn api:app --workers 1
 ```
+
+生产环境使用 Docker Compose，并由镜像内虚拟环境直接启动 Uvicorn。部署步骤见
+[`deployment.md`](deployment.md)。
 
 接口文档还可以通过 FastAPI 自动生成的页面查看：
 

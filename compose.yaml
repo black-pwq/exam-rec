@@ -1,0 +1,85 @@
+name: exam-rec
+
+services:
+  app:
+    image: ${EXAM_REC_IMAGE:-exam-rec:local-cpu}
+    platform: linux/amd64
+    build:
+      context: .
+      args:
+        PADDLE_GROUP: paddle-cpu
+        VCS_REF: ${EXAM_REC_VCS_REF:-unknown}
+    env_file:
+      - ./deploy/.env.production
+    environment:
+      EXAM_REC_JOB_ROOT: /data/jobs
+      EXAM_REC_LLM_API_KEY_FILE: /run/secrets/llm_api_key
+      EXAM_REC_RUNTIME: cpu
+      PADDLE_PDX_CACHE_HOME: /data/models
+    secrets:
+      - llm_api_key
+    volumes:
+      - jobs:/data/jobs
+      - models:/data/models
+    expose:
+      - "8000"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 10m
+    healthcheck:
+      test: ["CMD", "python", "-m", "deploy.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+      retries: 4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    networks:
+      - backend
+
+  proxy:
+    image: nginx:1.30.4-alpine3.24
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      NGINX_CLIENT_MAX_BODY_SIZE: ${NGINX_CLIENT_MAX_BODY_SIZE:-500m}
+      NGINX_ENVSUBST_FILTER: ^NGINX_
+    ports:
+      - "${EXAM_REC_BIND_IP:-127.0.0.1}:${EXAM_REC_PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1/health/ready | grep -q '\"status\":\"ready\"'",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  jobs:
+  models:
+
+secrets:
+  llm_api_key:
+    file: ${EXAM_REC_LLM_API_KEY_SECRET_FILE:-./deploy/secrets/llm_api_key}

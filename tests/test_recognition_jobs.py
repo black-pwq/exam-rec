@@ -14,7 +14,9 @@ from recognition_jobs import (
     JobNotFoundError,
     JobQueueFullError,
     JobStore,
+    LlmSettings,
     RecognitionService,
+    ServiceAlreadyRunningError,
 )
 
 
@@ -187,3 +189,52 @@ def test_service_rejects_jobs_when_waiting_queue_is_full(tmp_path: Path) -> None
     finally:
         processor.release_first.set()
         service.stop()
+
+
+def test_service_rejects_a_second_process_for_the_same_job_root(
+    tmp_path: Path,
+) -> None:
+    first = RecognitionService(JobStore(tmp_path), ControlledProcessor)
+    second = RecognitionService(JobStore(tmp_path), ControlledProcessor)
+    first.start()
+    try:
+        with pytest.raises(ServiceAlreadyRunningError, match="job root"):
+            second.start()
+    finally:
+        first.stop()
+
+    second.start()
+    second.stop()
+
+
+def test_llm_settings_can_read_api_key_from_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    key_file = tmp_path / "llm-api-key"
+    key_file.write_text(" secret-key \n", encoding="utf-8")
+    monkeypatch.delenv("EXAM_REC_LLM_API_KEY", raising=False)
+    monkeypatch.setenv("EXAM_REC_LLM_API_KEY_FILE", str(key_file))
+    monkeypatch.setenv("EXAM_REC_LLM_BASE_URL", "https://llm.internal/v1")
+    monkeypatch.setenv("EXAM_REC_LLM_MODEL", "model")
+
+    assert LlmSettings.from_env() == LlmSettings(
+        api_key="secret-key",
+        base_url="https://llm.internal/v1",
+        model="model",
+    )
+
+
+def test_llm_settings_rejects_conflicting_api_key_sources(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    key_file = tmp_path / "llm-api-key"
+    key_file.write_text("file-key", encoding="utf-8")
+    monkeypatch.setenv("EXAM_REC_LLM_API_KEY", "environment-key")
+    monkeypatch.setenv("EXAM_REC_LLM_API_KEY_FILE", str(key_file))
+    monkeypatch.setenv("EXAM_REC_LLM_BASE_URL", "https://llm.internal/v1")
+    monkeypatch.setenv("EXAM_REC_LLM_MODEL", "model")
+
+    with pytest.raises(RuntimeError, match="must not both be set"):
+        LlmSettings.from_env()

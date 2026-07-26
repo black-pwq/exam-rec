@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import queue
@@ -48,6 +49,10 @@ class JobNotCompleteError(RuntimeError):
         super().__init__(f"recognition job is not complete: {status}")
 
 
+class ServiceAlreadyRunningError(RuntimeError):
+    pass
+
+
 class RecognitionProcessor(Protocol):
     def process_iter(self, path: Path) -> Iterator[PageProcessingResult]: ...
 
@@ -60,18 +65,41 @@ class LlmSettings:
 
     @classmethod
     def from_env(cls) -> LlmSettings:
+        api_key = os.getenv("EXAM_REC_LLM_API_KEY", "").strip()
+        api_key_file = os.getenv("EXAM_REC_LLM_API_KEY_FILE", "").strip()
+        if api_key and api_key_file:
+            raise RuntimeError(
+                "EXAM_REC_LLM_API_KEY and EXAM_REC_LLM_API_KEY_FILE "
+                "must not both be set"
+            )
+        if api_key_file:
+            path = Path(api_key_file)
+            try:
+                api_key = path.read_text(encoding="utf-8").strip()
+            except OSError as error:
+                raise RuntimeError(
+                    f"failed to read EXAM_REC_LLM_API_KEY_FILE: {path}: {error}"
+                ) from error
+            if not api_key:
+                raise RuntimeError(
+                    f"EXAM_REC_LLM_API_KEY_FILE is empty: {path}"
+                )
+
         names = {
-            "api_key": "EXAM_REC_LLM_API_KEY",
             "base_url": "EXAM_REC_LLM_BASE_URL",
             "model": "EXAM_REC_LLM_MODEL",
         }
         values = {name: os.getenv(variable, "").strip() for name, variable in names.items()}
         missing = [names[name] for name, value in values.items() if not value]
+        if not api_key:
+            missing.append(
+                "EXAM_REC_LLM_API_KEY or EXAM_REC_LLM_API_KEY_FILE"
+            )
         if missing:
             raise RuntimeError(
                 "missing required LLM settings: " + ", ".join(sorted(missing))
             )
-        return cls(**values)
+        return cls(api_key=api_key, **values)
 
 
 class DefaultRecognitionProcessor:
@@ -409,6 +437,46 @@ class _JobCancelled(Exception):
     pass
 
 
+class ServiceInstanceLock:
+    """Hold a process-level exclusive lock for one local job store."""
+
+    def __init__(self, root: Path) -> None:
+        self.path = root / ".service.lock"
+        self._file: Any | None = None
+
+    @property
+    def acquired(self) -> bool:
+        return self._file is not None
+
+    def acquire(self) -> None:
+        if self._file is not None:
+            return
+        file = self.path.open("a+", encoding="utf-8")
+        try:
+            fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            file.close()
+            raise ServiceAlreadyRunningError(
+                f"another recognition service is using job root: "
+                f"{self.path.parent}"
+            ) from error
+        file.seek(0)
+        file.truncate()
+        file.write(f"{os.getpid()}\n")
+        file.flush()
+        self._file = file
+
+    def release(self) -> None:
+        file = self._file
+        if file is None:
+            return
+        self._file = None
+        try:
+            fcntl.flock(file.fileno(), fcntl.LOCK_UN)
+        finally:
+            file.close()
+
+
 class RecognitionService:
     """Run whole-document recognition jobs serially in FIFO order."""
 
@@ -433,6 +501,7 @@ class RecognitionService:
         self._startup_error: BaseException | None = None
         self._current_job_id: str | None = None
         self._thread: threading.Thread | None = None
+        self._instance_lock = ServiceInstanceLock(self.store.root)
 
     @property
     def running(self) -> bool:
@@ -448,15 +517,22 @@ class RecognitionService:
         with self._state_lock:
             if self._thread is not None:
                 return
-            self.store.mark_unfinished_interrupted()
-            self._thread = threading.Thread(
-                target=self._worker_main,
-                name="recognition-worker",
-                daemon=True,
-            )
-            self._thread.start()
+            self._instance_lock.acquire()
+            try:
+                self.store.mark_unfinished_interrupted()
+                self._thread = threading.Thread(
+                    target=self._worker_main,
+                    name="recognition-worker",
+                    daemon=True,
+                )
+                self._thread.start()
+            except BaseException:
+                self._thread = None
+                self._instance_lock.release()
+                raise
         self._ready.wait()
         if self._startup_error is not None:
+            self._instance_lock.release()
             raise RuntimeError(
                 f"failed to start recognition worker: {self._startup_error}"
             ) from self._startup_error
@@ -494,6 +570,7 @@ class RecognitionService:
         with self._state_lock:
             thread = self._thread
             if thread is None:
+                self._instance_lock.release()
                 return
             self._stop.set()
             for cancellation in self._cancellations.values():
@@ -505,6 +582,7 @@ class RecognitionService:
         if threading.current_thread() is not thread:
             thread.join()
         self.store.mark_unfinished_interrupted()
+        self._instance_lock.release()
 
     def _worker_main(self) -> None:
         processor: RecognitionProcessor | None = None

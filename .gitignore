@@ -15,6 +15,11 @@ output/
 output.json
 var/jobs/
 
+# production deployment
+deploy/.env.production
+deploy/secrets/*
+!deploy/secrets/*.example
+
 # ide
 .vscode/
 
