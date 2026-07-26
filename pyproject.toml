@@ -7,7 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
 	"opencv-python-headless>=4.10,<5",
 	"openai>=2,<3",
-	"paddlepaddle==3.2.0",
 	"pymupdf>=1.24,<2",
 	"paddleocr[all]>=3.7.0",
 	"fastapi>=0.115,<1",
@@ -19,13 +18,34 @@ dependencies = [
 dev = [
     "pytest>=9,<10",
 ]
+paddle-cpu = [
+    "paddlepaddle==3.2.0",
+]
+paddle-cu118 = [
+    "paddlepaddle-gpu==3.2.0",
+]
 
 [tool.uv.sources]
 paddlepaddle = { index = "paddle-cpu" }
+paddlepaddle-gpu = { index = "paddle-cu118" }
+
+[tool.uv]
+default-groups = ["dev", "paddle-cpu"]
+conflicts = [
+    [
+        { group = "paddle-cpu" },
+        { group = "paddle-cu118" },
+    ],
+]
 
 [[tool.uv.index]]
 name = "paddle-cpu"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+explicit = true
+
+[[tool.uv.index]]
+name = "paddle-cu118"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cu118/"
 explicit = true
 
 [tool.pytest.ini_options]
