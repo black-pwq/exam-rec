@@ -10,6 +10,7 @@ from typing import Any, Protocol
 import pymupdf
 
 from ocr.base_ocr import BaseOcr, TransformedOcr
+from ocr.page_ocr import PageCachingOcr, PdfPageSource
 from ocr.pymu_ocr import PyMuPDFOcr
 from transform import MergeCollinearElements
 
@@ -136,6 +137,15 @@ class OcrRegistry:
             return TransformedOcr(source, MergeCollinearElements())
         return source
 
+    def close(self) -> None:
+        with self._lock:
+            instances = tuple(self._instances.values())
+            self._instances.clear()
+        for instance in instances:
+            close = getattr(instance, "close", None)
+            if close is not None:
+                close()
+
 
 _DEFAULT_OCR_REGISTRY = OcrRegistry()
 
@@ -159,6 +169,22 @@ class OcrFactory:
     ) -> BaseOcr:
         ocr_type = self.selector.select(path, page_indexes)
         return self.registry.get(ocr_type)
+
+    def create_page_ocr(
+        self,
+        path: str | PathLike[str],
+        page_indexes: Iterable[int],
+        *,
+        max_cached_pages: int = PageCachingOcr.DEFAULT_MAX_CACHED_PAGES,
+    ) -> PageCachingOcr:
+        indexes = tuple(page_indexes)
+        document = PdfPageSource(path)
+        model = self.create(path, indexes)
+        return PageCachingOcr(
+            document,
+            model,
+            max_cached_pages=max_cached_pages,
+        )
 
 
 _DEFAULT_OCR_FACTORY = OcrFactory(registry=_DEFAULT_OCR_REGISTRY)

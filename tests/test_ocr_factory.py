@@ -7,6 +7,7 @@ import pytest
 
 from ocr.base_ocr import BaseOcr, OcrElement, Point, TransformedOcr
 from ocr.ocr_factory import OcrFactory, OcrRegistry, OcrType, PdfTextLayerSelector
+from ocr.page_ocr import PageCachingOcr
 from ocr.paddle_ocr import PaddleOcr
 from ocr.pymu_ocr import PyMuPDFOcr
 
@@ -94,6 +95,22 @@ def test_factory_uses_selected_builder_and_options(tmp_path) -> None:
     assert isinstance(ocr, DummyOcr)
     assert ocr.options == {"lang": "ch"}
     assert selector.page_indexes is indexes
+
+
+def test_factory_creates_independent_document_bound_page_caches(tmp_path) -> None:
+    path = tmp_path / "input.pdf"
+    make_pdf(path, [None])
+    registry = OcrRegistry({DummyOcr: DummyOcr})
+    factory = OcrFactory(FixedSelector(DummyOcr), registry=registry)
+
+    first = factory.create_page_ocr(path, [0], max_cached_pages=1)
+    second = factory.create_page_ocr(path, [0], max_cached_pages=1)
+
+    assert isinstance(first, PageCachingOcr)
+    assert first is not second
+    assert first.ocr is second.ocr
+    assert first.document is not second.document
+    assert first.predict_pages([0]) == [[]]
 
 
 def test_registry_lazily_reuses_one_instance_per_type() -> None:

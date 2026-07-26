@@ -27,8 +27,10 @@ from extractor.regex_extractor import (
     HuaShengYanyu700RegexExtractor,
     RegexPatterns,
 )
-from ocr.ocr_factory import OcrFactory
-from utils.pdf import select_pdf_pages
+from ocr.page_ocr import (
+    PageOcr,
+    PageOcrPageCountError,
+)
 
 
 class ProcessingError(RuntimeError):
@@ -114,13 +116,13 @@ class ProblemProcessingPipeline:
     def __init__(
         self,
         *,
-        ocr_factory: OcrFactory | None = None,
+        page_ocr: PageOcr,
         evaluator: ProblemEvaluator | None = None,
         analyzer: RegexAnalyzer | None = None,
         policy: ProcessingPolicy | None = None,
         fixed_extractor_factories: Sequence[ExtractorFactory] | None = None,
     ) -> None:
-        self.ocr_factory = ocr_factory or OcrFactory()
+        self.page_ocr = page_ocr
         self.evaluator = evaluator or StructuralProblemEvaluator()
         self.analyzer = analyzer
         self.policy = policy or ProcessingPolicy()
@@ -147,33 +149,39 @@ class ProblemProcessingPipeline:
         self, request: ProcessingRequest
     ) -> Iterator[PageProcessingResult]:
         path = Path(request.path)
-        self._validate_request(request, path)
+        page_count = self._validate_request(request, path)
         question_indexes = list(request.questions)
         sample_indexes = question_indexes[: self.policy.sample_page_count]
-        ocr = self.ocr_factory.create(path, sample_indexes)
+        ocr = self.page_ocr
+        if ocr.document.page_count != page_count:
+            raise InvalidPdfError(
+                "page OCR document does not match the input PDF"
+            )
 
-        sample_pdf_bytes = select_pdf_pages(path, sample_indexes)
-        sample_pages = ocr.predict(sample_pdf_bytes)
-        if len(sample_pages) != len(sample_indexes):
-            raise InvalidPdfError("OCR returned fewer pages than the sample page range")
+        try:
+            sample_pages = ocr.predict_pages(sample_indexes)
+        except PageOcrPageCountError as error:
+            raise InvalidPdfError(str(error)) from error
         candidate = self._select_extractor(sample_pages)
         if candidate.report.score < self.policy.minimum_acceptable_score:
             raise LowConfidenceExtractionError(candidate.report)
 
-        questions_pdf_bytes = select_pdf_pages(path, question_indexes)
         contextual = ContextualProblemExtractor(
             candidate.extractor,
             page_offset=request.questions.start,
         )
-        for extracted_page in contextual.extract_iter(
-            ocr.predict_iter(questions_pdf_bytes)
-        ):
-            yield PageProcessingResult(
-                page_index=extracted_page.page_index,
-                problems=tuple(extracted_page.problems),
-                extractor_name=type(candidate.extractor).__name__,
-                evaluation=candidate.report,
-            )
+        try:
+            for extracted_page in contextual.extract_iter(
+                ocr.predict_pages_iter(question_indexes)
+            ):
+                yield PageProcessingResult(
+                    page_index=extracted_page.page_index,
+                    problems=tuple(extracted_page.problems),
+                    extractor_name=type(candidate.extractor).__name__,
+                    evaluation=candidate.report,
+                )
+        except PageOcrPageCountError as error:
+            raise InvalidPdfError(str(error)) from error
 
     def _select_extractor(self, sample_pages: Sequence[OcrPage]) -> ExtractionCandidate:
         selector = BestExtractorSelector(self.evaluator)

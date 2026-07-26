@@ -11,8 +11,7 @@ from typing import Any, Protocol
 import pymupdf
 
 from extractor.base_extractor import RawTextExtractor
-from ocr.ocr_factory import OcrFactory
-from utils.pdf import select_pdf_pages
+from ocr.page_ocr import PageOcr
 
 
 logger = logging.getLogger(__name__)
@@ -239,11 +238,12 @@ class QuestionRangeResolver:
     def __init__(
         self,
         analyzer: QuestionStartAnalyzer,
-        ocr_factory: OcrFactory | None = None,
+        *,
+        page_ocr: PageOcr,
         policy: QuestionRangePolicy | None = None,
     ) -> None:
         self.analyzer = analyzer
-        self.ocr_factory = ocr_factory or OcrFactory()
+        self.page_ocr = page_ocr
         self.policy = policy or QuestionRangePolicy()
 
     def resolve(self, path: str | PathLike[str]) -> range:
@@ -251,17 +251,20 @@ class QuestionRangeResolver:
         page_count = self._read_page_count(source)
         scanned_page_count = min(page_count, self.policy.max_scan_pages)
         page_indexes = list(range(scanned_page_count))
+        ocr = self.page_ocr
+        if ocr.document.page_count != page_count:
+            raise QuestionRangeResolutionError(
+                "page OCR document does not match the input PDF"
+            )
 
         try:
-            ocr = self.ocr_factory.create(source, page_indexes)
             logger.info(
                 "Detecting question range: path=%s pages=%s ocr=%s",
                 source,
                 page_indexes,
-                type(ocr).__name__,
+                type(ocr.ocr).__name__,
             )
-            sample_pdf = select_pdf_pages(source, page_indexes)
-            pages = ocr.predict(sample_pdf)
+            pages = ocr.predict_pages(page_indexes)
         except QuestionRangeResolutionError:
             raise
         except Exception as error:

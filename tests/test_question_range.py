@@ -1,5 +1,5 @@
 import json
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -8,6 +8,7 @@ import pymupdf
 import pytest
 
 from ocr.base_ocr import BaseOcr, OcrElement
+from ocr.page_ocr import PageCachingOcr, PdfPageSource
 from question_range import (
     LlmQuestionStartAnalyzer,
     LowConfidenceQuestionRangeError,
@@ -41,16 +42,6 @@ class StubOcr(BaseOcr):
         yield from self.pages[: self.input_page_count]
 
 
-class StubFactory:
-    def __init__(self, ocr: BaseOcr) -> None:
-        self.ocr = ocr
-        self.page_indexes: list[int] | None = None
-
-    def create(self, path: Path, page_indexes: Iterable[int]) -> BaseOcr:
-        self.page_indexes = list(page_indexes)
-        return self.ocr
-
-
 class StubAnalyzer:
     def __init__(self, decision: QuestionStartDecision) -> None:
         self.decision = decision
@@ -65,6 +56,10 @@ def element(text: str) -> OcrElement:
     return OcrElement(bbox=[], label="text", content=text)
 
 
+def cached_ocr(path: Path, ocr: BaseOcr) -> PageCachingOcr:
+    return PageCachingOcr(PdfPageSource(path), ocr)
+
+
 @pytest.mark.parametrize("page_count, expected_scan", [(3, 3), (25, 20)])
 def test_resolver_scans_up_to_configured_limit(
     tmp_path, page_count: int, expected_scan: int
@@ -72,14 +67,13 @@ def test_resolver_scans_up_to_configured_limit(
     path = tmp_path / "input.pdf"
     make_pdf(path, page_count)
     ocr = StubOcr([[element(str(index))] for index in range(expected_scan)])
-    factory = StubFactory(ocr)
     analyzer = StubAnalyzer(QuestionStartDecision(expected_scan - 1, 0.9))
 
     result = QuestionRangeResolver(
-        analyzer, ocr_factory=factory  # type: ignore[arg-type]
+        analyzer,
+        page_ocr=cached_ocr(path, ocr),
     ).resolve(path)
 
-    assert factory.page_indexes == list(range(expected_scan))
     assert ocr.input_page_count == expected_scan
     assert result == range(expected_scan - 1, page_count)
 
@@ -92,7 +86,7 @@ def test_resolver_preserves_empty_pages_and_truncates_each_page(tmp_path) -> Non
 
     QuestionRangeResolver(
         analyzer,
-        ocr_factory=StubFactory(ocr),  # type: ignore[arg-type]
+        page_ocr=cached_ocr(path, ocr),
         policy=QuestionRangePolicy(max_chars_per_page=3),
     ).resolve(path)
 
@@ -102,24 +96,29 @@ def test_resolver_preserves_empty_pages_and_truncates_each_page(tmp_path) -> Non
 def test_resolver_rejects_low_confidence_and_out_of_range(tmp_path) -> None:
     path = tmp_path / "input.pdf"
     make_pdf(path, 2)
-    factory = StubFactory(StubOcr([[], []]))
+    page_ocr = cached_ocr(path, StubOcr([[], []]))
 
     with pytest.raises(LowConfidenceQuestionRangeError) as low:
         QuestionRangeResolver(
             StubAnalyzer(QuestionStartDecision(0, 0.69)),
-            ocr_factory=factory,  # type: ignore[arg-type]
+            page_ocr=page_ocr,
         ).resolve(path)
     assert low.value.decision.confidence == 0.69
 
     with pytest.raises(QuestionStartOutOfRangeError):
         QuestionRangeResolver(
             StubAnalyzer(QuestionStartDecision(2, 0.9)),
-            ocr_factory=factory,  # type: ignore[arg-type]
+            page_ocr=page_ocr,
         ).resolve(path)
 
 
 def test_resolver_rejects_missing_and_password_protected_pdf(tmp_path) -> None:
-    resolver = QuestionRangeResolver(StubAnalyzer(QuestionStartDecision(0, 1)))
+    valid = tmp_path / "valid.pdf"
+    make_pdf(valid, 1)
+    resolver = QuestionRangeResolver(
+        StubAnalyzer(QuestionStartDecision(0, 1)),
+        page_ocr=cached_ocr(valid, StubOcr([[]])),
+    )
     with pytest.raises(QuestionRangeResolutionError, match="does not exist"):
         resolver.resolve(tmp_path / "missing.pdf")
 

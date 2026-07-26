@@ -13,6 +13,7 @@ wheels/
 # ocr records
 output/
 output.json
+var/jobs/
 
 # ide
 .vscode/

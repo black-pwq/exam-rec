@@ -3,6 +3,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from ocr.page_ocr import PdfPageSource
 from utils.pdf import select_pdf_pages
 
 
@@ -26,6 +27,22 @@ def test_select_pdf_pages_preserves_requested_order(tmp_path) -> None:
     try:
         assert selected.page_count == 2
         assert [page.get_text().strip() for page in selected] == ["third", "first"]
+    finally:
+        selected.close()
+
+
+def test_pdf_page_source_accepts_an_in_memory_snapshot(tmp_path) -> None:
+    path = tmp_path / "input.pdf"
+    make_pdf(path, ["first", "second"])
+
+    source = PdfPageSource(path.read_bytes())
+    selected = pymupdf.open(
+        stream=source.select_pages([1, 0]),
+        filetype="pdf",
+    )
+    try:
+        assert source.page_count == 2
+        assert [page.get_text().strip() for page in selected] == ["second", "first"]
     finally:
         selected.close()
 
