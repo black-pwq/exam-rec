@@ -113,7 +113,43 @@ docker compose --env-file deploy/.env.production logs -f app proxy
 容器日志采用 Docker `json-file` 驱动，每个文件最大 50 MB，保留 5 个文件。任务的
 `events.jsonl` 仍是持久化状态记录，不会被应用日志替代。
 
-## 5. 更新和回滚
+## 5. 停止和恢复服务
+
+停止并删除 CPU 部署的容器和 Compose 网络：
+
+```bash
+docker compose \
+  --env-file deploy/.env.production \
+  -f compose.yaml \
+  down
+```
+
+GPU 部署需要同时指定 GPU 覆盖文件：
+
+```bash
+docker compose \
+  --env-file deploy/.env.production \
+  -f compose.yaml \
+  -f compose.gpu.yaml \
+  down
+```
+
+`down` 不会删除 `exam-rec_jobs` 和 `exam-rec_models` 命名卷。不要添加 `-v`，否则
+任务数据和已下载模型会被一并删除。重新部署时执行 `./deploy/release.sh cpu` 或
+`./deploy/release.sh gpu`。
+
+如果只是临时停机并希望保留现有容器，使用 `stop`，之后使用相同 Compose 参数执行
+`start`。以下以 CPU 部署为例：
+
+```bash
+docker compose --env-file deploy/.env.production -f compose.yaml stop
+docker compose --env-file deploy/.env.production -f compose.yaml start
+```
+
+停止服务前应确认没有活跃识别任务。手动停机不会自动恢复未完成任务；如果需要升级版本，
+应使用发布脚本提供的排空和回滚流程。
+
+## 6. 更新和回滚
 
 更新服务器源码到目标提交后，重新运行对应的 `release.sh`。脚本首先构建新镜像，然后：
 
@@ -127,7 +163,7 @@ docker compose --env-file deploy/.env.production logs -f app proxy
 新版本未能健康启动时，发布脚本会自动恢复升级前的镜像。需要主动回滚时，将源码切换到
 目标提交并重新执行 `release.sh`；任务卷和模型卷不会被替换。
 
-## 6. 数据和容量
+## 7. 数据和容量
 
 Docker 命名卷：
 
