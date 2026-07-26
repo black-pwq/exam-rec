@@ -84,4 +84,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 \
     CMD ["python", "-m", "deploy.healthcheck"]
 
-CMD ["/app/deploy/entrypoint.sh"]
+ENTRYPOINT ["/app/deploy/entrypoint.sh"]
+CMD ["serve"]

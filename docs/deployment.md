@@ -33,23 +33,23 @@ Uvicorn :8000（1 个进程）
 
 ## 2. 配置
 
-创建本机配置和密钥文件：
+创建本机配置文件：
 
 ```bash
 cp deploy/env.production.example deploy/.env.production
-cp deploy/secrets/llm_api_key.example deploy/secrets/llm_api_key
-chmod 600 deploy/.env.production deploy/secrets/llm_api_key
+chmod 600 deploy/.env.production
 ```
 
 编辑 `deploy/.env.production`：
 
 - 将 `EXAM_REC_BIND_IP` 改成服务器的可信内网 IP；默认 `127.0.0.1` 只允许本机访问。
-- 设置实际的 `EXAM_REC_LLM_BASE_URL` 和 `EXAM_REC_LLM_MODEL`。
+- 设置实际的 `EXAM_REC_LLM_API_KEY`、`EXAM_REC_LLM_BASE_URL` 和
+  `EXAM_REC_LLM_MODEL`。
 - 根据磁盘和处理能力调整上传、页数、排队数及 CPU 线程数限制。
 
-将 LLM 密钥单独写入 `deploy/secrets/llm_api_key`，文件只能包含密钥和可选的末尾换行。
-容器通过 `EXAM_REC_LLM_API_KEY_FILE` 读取 Docker secret，不会把密钥写入镜像或
-Compose 环境变量。
+`deploy/.env.production` 已被 Git 忽略，必须保持 `0600` 权限。密钥会作为容器环境
+变量传入，因此拥有 Docker 管理权限的用户可以通过容器检查命令读取；本方案假定 Docker
+权限只授予可信管理员。
 
 Nginx 默认限制请求体为 500 MB。提高 `EXAM_REC_MAX_UPLOAD_BYTES` 时，必须同步提高
 `NGINX_CLIENT_MAX_BODY_SIZE`，否则请求会先被 Nginx 拒绝。

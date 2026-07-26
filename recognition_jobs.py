@@ -65,41 +65,18 @@ class LlmSettings:
 
     @classmethod
     def from_env(cls) -> LlmSettings:
-        api_key = os.getenv("EXAM_REC_LLM_API_KEY", "").strip()
-        api_key_file = os.getenv("EXAM_REC_LLM_API_KEY_FILE", "").strip()
-        if api_key and api_key_file:
-            raise RuntimeError(
-                "EXAM_REC_LLM_API_KEY and EXAM_REC_LLM_API_KEY_FILE "
-                "must not both be set"
-            )
-        if api_key_file:
-            path = Path(api_key_file)
-            try:
-                api_key = path.read_text(encoding="utf-8").strip()
-            except OSError as error:
-                raise RuntimeError(
-                    f"failed to read EXAM_REC_LLM_API_KEY_FILE: {path}: {error}"
-                ) from error
-            if not api_key:
-                raise RuntimeError(
-                    f"EXAM_REC_LLM_API_KEY_FILE is empty: {path}"
-                )
-
         names = {
+            "api_key": "EXAM_REC_LLM_API_KEY",
             "base_url": "EXAM_REC_LLM_BASE_URL",
             "model": "EXAM_REC_LLM_MODEL",
         }
         values = {name: os.getenv(variable, "").strip() for name, variable in names.items()}
         missing = [names[name] for name, value in values.items() if not value]
-        if not api_key:
-            missing.append(
-                "EXAM_REC_LLM_API_KEY or EXAM_REC_LLM_API_KEY_FILE"
-            )
         if missing:
             raise RuntimeError(
                 "missing required LLM settings: " + ", ".join(sorted(missing))
             )
-        return cls(api_key=api_key, **values)
+        return cls(**values)
 
 
 class DefaultRecognitionProcessor:

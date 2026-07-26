@@ -19,8 +19,8 @@ if [ ! -f deploy/.env.production ]; then
     echo "missing deploy/.env.production; copy deploy/env.production.example" >&2
     exit 2
 fi
-if [ ! -s deploy/secrets/llm_api_key ]; then
-    echo "missing or empty deploy/secrets/llm_api_key" >&2
+if ! grep -Eq '^EXAM_REC_LLM_API_KEY=.+$' deploy/.env.production; then
+    echo "deploy/.env.production must define a non-empty EXAM_REC_LLM_API_KEY" >&2
     exit 2
 fi
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then

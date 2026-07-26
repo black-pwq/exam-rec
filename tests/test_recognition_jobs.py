@@ -207,14 +207,8 @@ def test_service_rejects_a_second_process_for_the_same_job_root(
     second.stop()
 
 
-def test_llm_settings_can_read_api_key_from_file(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    key_file = tmp_path / "llm-api-key"
-    key_file.write_text(" secret-key \n", encoding="utf-8")
-    monkeypatch.delenv("EXAM_REC_LLM_API_KEY", raising=False)
-    monkeypatch.setenv("EXAM_REC_LLM_API_KEY_FILE", str(key_file))
+def test_llm_settings_reads_required_environment_variables(monkeypatch) -> None:
+    monkeypatch.setenv("EXAM_REC_LLM_API_KEY", " secret-key ")
     monkeypatch.setenv("EXAM_REC_LLM_BASE_URL", "https://llm.internal/v1")
     monkeypatch.setenv("EXAM_REC_LLM_MODEL", "model")
 
@@ -225,16 +219,10 @@ def test_llm_settings_can_read_api_key_from_file(
     )
 
 
-def test_llm_settings_rejects_conflicting_api_key_sources(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    key_file = tmp_path / "llm-api-key"
-    key_file.write_text("file-key", encoding="utf-8")
-    monkeypatch.setenv("EXAM_REC_LLM_API_KEY", "environment-key")
-    monkeypatch.setenv("EXAM_REC_LLM_API_KEY_FILE", str(key_file))
+def test_llm_settings_requires_api_key_environment_variable(monkeypatch) -> None:
+    monkeypatch.delenv("EXAM_REC_LLM_API_KEY", raising=False)
     monkeypatch.setenv("EXAM_REC_LLM_BASE_URL", "https://llm.internal/v1")
     monkeypatch.setenv("EXAM_REC_LLM_MODEL", "model")
 
-    with pytest.raises(RuntimeError, match="must not both be set"):
+    with pytest.raises(RuntimeError, match="EXAM_REC_LLM_API_KEY"):
         LlmSettings.from_env()

@@ -30,10 +30,9 @@ CUDA 11.8 images are built from the same lockfile.
 
 ```bash
 cp deploy/env.production.example deploy/.env.production
-cp deploy/secrets/llm_api_key.example deploy/secrets/llm_api_key
-chmod 600 deploy/.env.production deploy/secrets/llm_api_key
+chmod 600 deploy/.env.production
 
-# Edit both files, then deploy one runtime:
+# Edit the environment file, then deploy one runtime:
 ./deploy/release.sh cpu
 # or
 ./deploy/release.sh gpu

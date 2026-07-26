@@ -604,11 +604,10 @@ EXAM_REC_LLM_BASE_URL
 EXAM_REC_LLM_MODEL
 ```
 
-LLM API 密钥必须通过以下两种方式之一配置，不能同时设置：
+当前 Docker Compose 部署从 `deploy/.env.production` 读取：
 
 ```text
 EXAM_REC_LLM_API_KEY
-EXAM_REC_LLM_API_KEY_FILE=/run/secrets/llm_api_key
 ```
 
 可选配置：

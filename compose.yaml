@@ -13,11 +13,8 @@ services:
       - ./deploy/.env.production
     environment:
       EXAM_REC_JOB_ROOT: /data/jobs
-      EXAM_REC_LLM_API_KEY_FILE: /run/secrets/llm_api_key
       EXAM_REC_RUNTIME: cpu
       PADDLE_PDX_CACHE_HOME: /data/models
-    secrets:
-      - llm_api_key
     volumes:
       - jobs:/data/jobs
       - models:/data/models
@@ -79,7 +76,3 @@ networks:
 volumes:
   jobs:
   models:
-
-secrets:
-  llm_api_key:
-    file: ${EXAM_REC_LLM_API_KEY_SECRET_FILE:-./deploy/secrets/llm_api_key}

@@ -92,3 +92,20 @@ def test_runtime_image_installs_and_import_checks_opencv() -> None:
 
     assert "libgl1" in dockerfile
     assert 'import cv2; print(' in dockerfile
+
+
+def test_container_uses_env_key_and_runs_as_unprivileged_user() -> None:
+    root = Path(__file__).parents[1]
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    entrypoint = (root / "deploy/entrypoint.sh").read_text(encoding="utf-8")
+    compose = (root / "compose.yaml").read_text(encoding="utf-8")
+    environment = (
+        root / "deploy/env.production.example"
+    ).read_text(encoding="utf-8")
+
+    assert "USER examrec" in dockerfile
+    assert "gosu" not in dockerfile
+    assert 'ENTRYPOINT ["/app/deploy/entrypoint.sh"]' in dockerfile
+    assert 'exec "$@"' in entrypoint
+    assert "\nsecrets:" not in compose
+    assert "EXAM_REC_LLM_API_KEY=" in environment
