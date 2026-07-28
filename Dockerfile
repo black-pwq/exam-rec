@@ -54,11 +54,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY --link --from=builder --chown=examrec:examrec /app/.venv /app/.venv
+COPY --link --from=builder --chown=10001:10001 /app/.venv /app/.venv
 
 RUN python -c "import cv2; print('OpenCV', cv2.__version__)"
 
-COPY --link --chown=examrec:examrec \
+COPY --link --chown=10001:10001 \
     app_logging.py \
     api.py \
     pipeline.py \
@@ -66,10 +66,10 @@ COPY --link --chown=examrec:examrec \
     recognition_jobs.py \
     transform.py \
     ./
-COPY --link --chown=examrec:examrec extractor ./extractor
-COPY --link --chown=examrec:examrec ocr ./ocr
-COPY --link --chown=examrec:examrec utils ./utils
-COPY --link --chown=examrec:examrec deploy ./deploy
+COPY --link --chown=10001:10001 extractor ./extractor
+COPY --link --chown=10001:10001 ocr ./ocr
+COPY --link --chown=10001:10001 utils ./utils
+COPY --link --chown=10001:10001 deploy ./deploy
 
 RUN chmod 0555 /app/deploy/entrypoint.sh
 
