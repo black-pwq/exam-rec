@@ -28,11 +28,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12.12-slim-bookworm AS runtime
 
-ARG VCS_REF=unknown
-
-LABEL org.opencontainers.image.title="Exam Recognition API" \
-      org.opencontainers.image.revision="$VCS_REF"
-
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -59,11 +54,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY --from=builder --chown=examrec:examrec /app/.venv /app/.venv
+COPY --link --from=builder --chown=examrec:examrec /app/.venv /app/.venv
 
 RUN python -c "import cv2; print('OpenCV', cv2.__version__)"
 
-COPY --chown=examrec:examrec \
+COPY --link --chown=examrec:examrec \
     app_logging.py \
     api.py \
     pipeline.py \
@@ -71,10 +66,10 @@ COPY --chown=examrec:examrec \
     recognition_jobs.py \
     transform.py \
     ./
-COPY --chown=examrec:examrec extractor ./extractor
-COPY --chown=examrec:examrec ocr ./ocr
-COPY --chown=examrec:examrec utils ./utils
-COPY --chown=examrec:examrec deploy ./deploy
+COPY --link --chown=examrec:examrec extractor ./extractor
+COPY --link --chown=examrec:examrec ocr ./ocr
+COPY --link --chown=examrec:examrec utils ./utils
+COPY --link --chown=examrec:examrec deploy ./deploy
 
 RUN chmod 0555 /app/deploy/entrypoint.sh
 
@@ -87,3 +82,9 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 \
 
 ENTRYPOINT ["/app/deploy/entrypoint.sh"]
 CMD ["serve"]
+
+# Keep revision-only metadata last so a new commit does not invalidate the
+# operating-system and Python dependency layers.
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.title="Exam Recognition API" \
+      org.opencontainers.image.revision="$VCS_REF"

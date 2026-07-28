@@ -49,9 +49,29 @@ compose() {
     fi
 }
 
+case "${EXAM_REC_PULL_BASE:-false}" in
+    1|true|TRUE|yes|YES)
+        pull_base=true
+        ;;
+    0|false|FALSE|no|NO|"")
+        pull_base=false
+        ;;
+    *)
+        echo "EXAM_REC_PULL_BASE must be true or false" >&2
+        exit 2
+        ;;
+esac
+
+build_image() {
+    if [ "$pull_base" = true ]; then
+        docker build --pull "$@"
+    else
+        docker build "$@"
+    fi
+}
+
 compose config --quiet
-docker build \
-    --pull \
+build_image \
     --build-arg "PADDLE_GROUP=$paddle_group" \
     --build-arg "VCS_REF=$revision" \
     --tag "$image" \
