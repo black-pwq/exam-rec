@@ -2,7 +2,7 @@ import json
 import os
 import re
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from itertools import chain
 from typing import Any
 
@@ -462,7 +462,7 @@ label命名组直接捕获OCR中已有的选项标签，text命名组捕获该�
                 else ""
             )
             try:
-                return self._parse_patterns(content)
+                patterns = self._parse_patterns(content)
             except RegexPatternError as error:
                 if attempt + 1 == self.max_attempts:
                     raise
@@ -474,6 +474,19 @@ label命名组直接捕获OCR中已有的选项标签，text命名组捕获该�
                         "content": f"配置校验失败：{error}。请修正配置并重新输出完整JSON对象。",
                     },
                 ]
+                continue
+
+            logger.info(
+                "LLM regex patterns accepted: model=%s attempt=%d patterns=%s",
+                self.model,
+                attempt + 1,
+                json.dumps(
+                    asdict(patterns),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            )
+            return patterns
 
         raise AssertionError("unreachable")
 
