@@ -34,7 +34,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     EXAM_REC_JOB_ROOT=/data/jobs \
     PADDLE_PDX_CACHE_HOME=/data/models
 
-RUN apt-get update \
+RUN sed -i \
+    's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+    /etc/apt/sources.list.d/debian.sources \
+    apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
         libgl1 \
