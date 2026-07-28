@@ -509,6 +509,7 @@ dependencies = [
     { name = "opencv-python-headless" },
     { name = "paddleocr", extra = ["all"] },
     { name = "pymupdf" },
+    { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "uvicorn" },
 ]
@@ -531,6 +532,7 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.10,<5" },
     { name = "paddleocr", extras = ["all"], specifier = ">=3.7.0" },
     { name = "pymupdf", specifier = ">=1.24,<2" },
+    { name = "python-dotenv", specifier = ">=1.1,<2" },
     { name = "python-multipart", specifier = ">=0.0.20,<1" },
     { name = "uvicorn", specifier = ">=0.34,<1" },
 ]

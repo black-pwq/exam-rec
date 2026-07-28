@@ -5,8 +5,9 @@ from typing import Any
 
 import pytest
 
-from ocr.base_ocr import BaseOcr, OcrElement, Point
-from ocr.page_ocr import (
+from exam_rec.ocr.base_ocr import BaseOcr, OcrElement, PersistingOcr, Point
+from exam_rec.ocr.page_ocr import (
+    CachedPageOcr,
     PageCachingOcr,
     PageOcr,
     PageOcrPageCountError,
@@ -65,6 +66,7 @@ def test_page_ocr_is_bound_to_an_in_memory_page_source() -> None:
 
     pages = ocr.predict_pages([2, 0, 2])
 
+    assert ocr.page_count == 3
     assert contents(pages) == [["two"], ["zero"], ["two"]]
     assert source.selections == [(2, 0, 2)]
 
@@ -97,6 +99,62 @@ def test_page_ocr_validates_backend_page_count(
 
     assert mismatch.value.expected == expected
     assert mismatch.value.actual == actual
+
+
+def test_cached_page_ocr_loads_once_and_returns_selected_defensive_copies(
+    tmp_path,
+) -> None:
+    persistence = tmp_path / "ocr.jsonl"
+    PersistingOcr(
+        FixedOutputOcr([[element("zero")], [], [element("two")]]),
+        persistence,
+    ).predict(None)
+
+    ocr = CachedPageOcr(persistence)
+    persistence.unlink()
+    pages = ocr.predict_pages([2, 0, 2, 1])
+    pages[0][0].bbox.append(Point(20, 20))
+    reread = ocr.predict_pages([2])
+
+    assert ocr.page_count == 3
+    assert contents(pages) == [["two"], ["zero"], ["two"], []]
+    assert len(pages[0][0].bbox) == 5
+    assert len(pages[2][0].bbox) == 4
+    assert len(reread[0][0].bbox) == 4
+
+
+@pytest.mark.parametrize("page_indexes", [[], [-1], [3], [True], ["0"]])
+def test_cached_page_ocr_validates_page_indexes(tmp_path, page_indexes) -> None:
+    persistence = tmp_path / "ocr.jsonl"
+    PersistingOcr(FixedOutputOcr([[], [], []]), persistence).predict(None)
+    ocr = CachedPageOcr(persistence)
+
+    with pytest.raises(ValueError, match="page_indexes"):
+        ocr.predict_pages(page_indexes)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        None,
+        '{"type":"header","version":1}\n'
+        '{"type":"page","elements":[]}\n',
+        '{"type":"header","version":2}\n'
+        '{"type":"complete"}\n',
+        '{"type":"header","version":1}\n'
+        'not-json\n'
+        '{"type":"complete"}\n',
+    ],
+)
+def test_cached_page_ocr_preserves_cached_ocr_validation(
+    tmp_path, content: str | None
+) -> None:
+    persistence = tmp_path / "ocr.jsonl"
+    if content is not None:
+        persistence.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="incomplete or invalid"):
+        CachedPageOcr(persistence)
 
 
 def test_page_cache_only_recognizes_unique_misses_and_caches_empty_pages() -> None:

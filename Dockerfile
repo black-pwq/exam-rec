@@ -28,12 +28,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.12.12-slim-bookworm AS runtime
 
-ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    EXAM_REC_JOB_ROOT=/data/jobs \
-    PADDLE_PDX_CACHE_HOME=/data/models
-
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
@@ -52,39 +46,28 @@ RUN apt-get update \
     && mkdir -p /app /data/jobs /data/models \
     && chown -R examrec:examrec /app /data /home/examrec
 
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app/src" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    EXAM_REC_JOB_ROOT=/data/jobs \
+    PADDLE_PDX_CACHE_HOME=/data/models
+
 WORKDIR /app
 
 COPY --link --from=builder --chown=10001:10001 /app/.venv /app/.venv
 
 RUN python -c "import cv2; print('OpenCV', cv2.__version__)"
 
-COPY --link --chown=10001:10001 \
-    app_logging.py \
-    api.py \
-    pipeline.py \
-    question_range.py \
-    recognition_jobs.py \
-    transform.py \
-    ./
-COPY --link --chown=10001:10001 extractor ./extractor
-COPY --link --chown=10001:10001 ocr ./ocr
-COPY --link --chown=10001:10001 utils ./utils
-COPY --link --chown=10001:10001 deploy ./deploy
-
-RUN chmod 0555 /app/deploy/entrypoint.sh
+COPY --link --chown=10001:10001 src ./src
 
 USER examrec
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 \
-    CMD ["python", "-m", "deploy.healthcheck"]
+    CMD ["python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health/ready', timeout=5).close()"]
 
-ENTRYPOINT ["/app/deploy/entrypoint.sh"]
-CMD ["serve"]
+CMD ["/app/.venv/bin/uvicorn", "exam_rec.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-graceful-shutdown", "600"]
 
-# Keep revision-only metadata last so a new commit does not invalidate the
-# operating-system and Python dependency layers.
-ARG VCS_REF=unknown
-LABEL org.opencontainers.image.title="Exam Recognition API" \
-      org.opencontainers.image.revision="$VCS_REF"
+LABEL org.opencontainers.image.title="Exam Recognition API"

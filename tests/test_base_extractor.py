@@ -3,14 +3,14 @@ from typing import Any
 
 import pytest
 
-from extractor.base_extractor import (
+from exam_rec.extractor.base_extractor import (
     ContextualProblemExtractor,
     OcrPage,
     Problem,
     ProblemExtractor,
     RawTextExtractor,
 )
-from ocr.base_ocr import BaseOcr, OcrElement
+from exam_rec.ocr.base_ocr import BaseOcr, OcrElement
 
 
 class StubOcr(BaseOcr):

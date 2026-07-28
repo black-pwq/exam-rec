@@ -1,7 +1,7 @@
 [project]
 name = "exam-rec"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI service for OCR-based exam question recognition"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,6 +12,7 @@ dependencies = [
 	"fastapi>=0.115,<1",
 	"uvicorn>=0.34,<1",
 	"python-multipart>=0.0.20,<1",
+	"python-dotenv>=1.1,<2",
 ]
 
 [dependency-groups]
@@ -30,6 +31,7 @@ paddlepaddle = { index = "paddle-cpu" }
 paddlepaddle-gpu = { index = "paddle-cu118" }
 
 [tool.uv]
+package = false
 default-groups = ["dev", "paddle-cpu"]
 conflicts = [
     [
@@ -55,11 +57,8 @@ default = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 addopts = "-ra"
 filterwarnings = [
     "ignore:No ccache found\\..*:UserWarning",
-]
-markers = [
-    "integration: runs PaddleOCR with local model files",
 ]

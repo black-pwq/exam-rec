@@ -5,11 +5,16 @@ from typing import Any
 import pymupdf
 import pytest
 
-from ocr.base_ocr import BaseOcr, OcrElement, Point, TransformedOcr
-from ocr.ocr_factory import OcrFactory, OcrRegistry, OcrType, PdfTextLayerSelector
-from ocr.page_ocr import PageCachingOcr
-from ocr.paddle_ocr import PaddleOcr
-from ocr.pymu_ocr import PyMuPDFOcr
+from exam_rec.ocr.base_ocr import BaseOcr, OcrElement, Point, TransformedOcr
+from exam_rec.ocr.ocr_factory import (
+    OcrFactory,
+    OcrRegistry,
+    OcrType,
+    PdfTextLayerSelector,
+)
+from exam_rec.ocr.page_ocr import PageCachingOcr
+from exam_rec.ocr.paddle_ocr import PaddleOcr
+from exam_rec.ocr.pymu_ocr import PyMuPDFOcr
 
 
 def make_pdf(path: Path, page_texts: list[str | None]) -> None:

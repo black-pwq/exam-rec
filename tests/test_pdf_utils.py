@@ -3,8 +3,8 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from ocr.page_ocr import PdfPageSource
-from utils.pdf import select_pdf_pages
+from exam_rec.ocr.page_ocr import PdfPageSource
+from exam_rec.utils.pdf import select_pdf_pages
 
 
 def make_pdf(path: Path, texts: list[str]) -> None:

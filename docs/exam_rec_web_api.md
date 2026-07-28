@@ -600,15 +600,13 @@ var/jobs/<job_id>/
 识别 worker 必须配置：
 
 ```text
+EXAM_REC_LLM_API_KEY
 EXAM_REC_LLM_BASE_URL
 EXAM_REC_LLM_MODEL
 ```
 
-当前 Docker Compose 部署从 `deploy/.env.production` 读取：
-
-```text
-EXAM_REC_LLM_API_KEY
-```
+当前 Docker Compose 部署从项目顶层 `.env` 读取这些配置。应用只把 `.env` 作为缺省
+来源，不会覆盖操作系统或部署工具已注入的同名变量。
 
 可选配置：
 
@@ -623,7 +621,7 @@ EXAM_REC_LOG_LEVEL=INFO
 使用一个 Web 进程启动：
 
 ```bash
-uv run uvicorn api:app --workers 1
+uv run uvicorn --app-dir src exam_rec.main:app --workers 1
 ```
 
 生产环境使用 Docker Compose，并由镜像内虚拟环境直接启动 Uvicorn。部署步骤见

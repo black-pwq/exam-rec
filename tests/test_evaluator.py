@@ -2,13 +2,13 @@ from collections.abc import Iterable, Iterator
 
 import pytest
 
-from extractor.base_extractor import OcrPage, Problem, ProblemExtractor
-from extractor.evaluator import (
+from exam_rec.extractor.base_extractor import OcrPage, Problem, ProblemExtractor
+from exam_rec.extractor.evaluator import (
     BestExtractorSelector,
     EvaluationReport,
     StructuralProblemEvaluator,
 )
-from ocr.base_ocr import OcrElement
+from exam_rec.ocr.base_ocr import OcrElement
 
 
 def page(*texts: str) -> OcrPage:

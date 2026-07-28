@@ -2,8 +2,8 @@ from dataclasses import replace
 
 import pytest
 
-from ocr.base_ocr import OcrElement, Point
-from transform import (
+from exam_rec.ocr.base_ocr import OcrElement, Point
+from exam_rec.transform import (
     FilterElements,
     MapElements,
     MergeCollinearElements,

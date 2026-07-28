@@ -5,8 +5,8 @@ import os
 import numpy as np
 import pytest
 
-from ocr.base_ocr import BaseOcr, OcrElement, Point
-from ocr.paddle_ocr import PaddleOcr
+from exam_rec.ocr.base_ocr import BaseOcr, OcrElement, Point
+from exam_rec.ocr.paddle_ocr import PaddleOcr
 
 
 class FakeEngine:
@@ -38,13 +38,18 @@ def test_init_uses_defaults_and_allows_overrides(monkeypatch) -> None:
         received.update(kwargs)
         return object()
 
-    monkeypatch.setattr("ocr.paddle_ocr.PaddleOCR", fake_paddle_ocr)
+    monkeypatch.setattr(
+        "exam_rec.ocr.paddle_ocr.PaddleOCR",
+        fake_paddle_ocr,
+    )
 
     ocr = PaddleOcr(lang="en", use_doc_unwarping=True)
 
     assert ocr.ocr is not None
     assert received == {
+        "enable_mkldnn": True,
         "lang": "en",
+        "precision": "fp16",
         "use_doc_orientation_classify": False,
         "use_doc_unwarping": True,
         "use_textline_orientation": False,

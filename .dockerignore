@@ -8,14 +8,13 @@ __pycache__
 .agents
 .codex
 .vscode
+.env
+.env.*
 build
 dist
 docs
+examples
 output
 tests
 var
-deploy/.env.production
-deploy/secrets/*
-!deploy/secrets/*.example
-example.py
 temp.py

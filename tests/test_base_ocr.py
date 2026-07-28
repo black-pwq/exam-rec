@@ -4,15 +4,15 @@ from typing import Any
 
 import pytest
 
-from ocr.base_ocr import (
+from exam_rec.ocr.base_ocr import (
     BaseOcr,
     OcrElement,
     PersistingOcr,
     Point,
     TransformedOcr,
 )
-from ocr.cached_ocr import CachedOcr
-from transform import RemoveElementsInRegions, PageRegion, ReplaceText
+from exam_rec.ocr.cached_ocr import CachedOcr
+from exam_rec.transform import RemoveElementsInRegions, PageRegion, ReplaceText
 
 
 class StubOcr(BaseOcr):

@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-from ocr.base_ocr import OcrElement, Point
-from ocr.pymu_ocr import PymuOcr
+from exam_rec.ocr.base_ocr import OcrElement, Point
+from exam_rec.ocr.pymu_ocr import PymuOcr
 
 
 class FakePage:
@@ -52,7 +52,7 @@ def test_predict_iter_extracts_text_lines(monkeypatch) -> None:
         received.append((args, kwargs))
         return document
 
-    monkeypatch.setattr("ocr.pymu_ocr.pymupdf.open", fake_open)
+    monkeypatch.setattr("exam_rec.ocr.pymu_ocr.pymupdf.open", fake_open)
 
     assert PymuOcr().predict(Path("sample.pdf")) == [
         [
@@ -92,7 +92,7 @@ def test_bytes_input_and_span_bbox_fallback(monkeypatch) -> None:
         received.update(kwargs)
         return document
 
-    monkeypatch.setattr("ocr.pymu_ocr.pymupdf.open", fake_open)
+    monkeypatch.setattr("exam_rec.ocr.pymu_ocr.pymupdf.open", fake_open)
 
     assert PymuOcr().predict(b"pdf") == [
         [
@@ -108,7 +108,10 @@ def test_bytes_input_and_span_bbox_fallback(monkeypatch) -> None:
 
 def test_document_closes_when_iteration_stops_early(monkeypatch) -> None:
     document = FakeDocument(FakePage({"blocks": []}), FakePage({"blocks": []}))
-    monkeypatch.setattr("ocr.pymu_ocr.pymupdf.open", lambda *args: document)
+    monkeypatch.setattr(
+        "exam_rec.ocr.pymu_ocr.pymupdf.open",
+        lambda *args: document,
+    )
     iterator = PymuOcr().predict_iter("sample.pdf")
 
     assert next(iterator) == []

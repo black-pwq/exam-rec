@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from app_logging import APP_LOGGER_NAME, configure_logging, get_logger
+from exam_rec.app_logging import APP_LOGGER_NAME, configure_logging, get_logger
 
 
 @pytest.fixture

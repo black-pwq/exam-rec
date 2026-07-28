@@ -1,0 +1,1 @@
+"""Exam recognition application package."""

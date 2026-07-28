@@ -7,9 +7,9 @@ from typing import Any
 import pymupdf
 import pytest
 
-from ocr.base_ocr import BaseOcr, OcrElement
-from ocr.page_ocr import PageCachingOcr, PdfPageSource
-from question_range import (
+from exam_rec.ocr.base_ocr import BaseOcr, OcrElement
+from exam_rec.ocr.page_ocr import PageCachingOcr, PdfPageSource
+from exam_rec.question_range import (
     LlmQuestionStartAnalyzer,
     LowConfidenceQuestionRangeError,
     QuestionRangePolicy,

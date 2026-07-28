@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from extractor.base_extractor import Problem
-from extractor.regex_extractor import (
+from exam_rec.extractor.base_extractor import Problem
+from exam_rec.extractor.regex_extractor import (
     GeneralRegexExtractor,
     LlmRegexExtractor,
     HuaShengRegexExtractor,
@@ -16,8 +16,8 @@ from extractor.regex_extractor import (
     RegexPatternValidator,
     RegexPatterns,
 )
-from ocr.base_ocr import BaseOcr, OcrElement, PersistingOcr, Point
-from ocr.cached_ocr import CachedOcr
+from exam_rec.ocr.base_ocr import BaseOcr, OcrElement, PersistingOcr, Point
+from exam_rec.ocr.cached_ocr import CachedOcr
 
 
 class StubOcr(BaseOcr):
@@ -296,11 +296,38 @@ def test_llm_analyzer_logs_token_usage_for_each_call(caplog) -> None:
     client, _ = llm_client(response)
     analyzer = LlmRegexAnalyzer("https://example.test", "key", "model", client)
 
-    with caplog.at_level("INFO", logger="extractor.regex_extractor"):
+    with caplog.at_level("INFO", logger="exam_rec.extractor.regex_extractor"):
         analyzer.analyze_regex_pattern("第1题\nA.甲")
 
     assert "model=model attempt=1" in caplog.text
     assert "prompt_tokens=10 completion_tokens=5 total_tokens=15" in caplog.text
+
+
+def test_llm_analyzer_logs_only_the_valid_patterns_after_retry(caplog) -> None:
+    invalid = "not json"
+    valid_patterns = {
+        "question": r"^第(?P<number>\d+)题$",
+        "options": r"(?P<label>[A-D])[.．](?P<text>.*)$",
+        "answer": r"^答案[:：](?P<answer>[A-D])$",
+        "noise_lines": ["模拟试卷"],
+        "noise_prefixes": ["第"],
+        "multiline_options": False,
+    }
+    client, _ = llm_client([invalid, json.dumps(valid_patterns)])
+    analyzer = LlmRegexAnalyzer("https://example.test", "key", "model", client)
+
+    with caplog.at_level("INFO", logger="exam_rec.extractor.regex_extractor"):
+        analyzer.analyze_regex_pattern("第1题\nA.甲")
+
+    accepted = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("LLM regex patterns accepted:")
+    ]
+    assert accepted == [
+        "LLM regex patterns accepted: model=model attempt=2 patterns="
+        + json.dumps(valid_patterns, ensure_ascii=False, sort_keys=True)
+    ]
 
 
 @pytest.mark.parametrize(

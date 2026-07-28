@@ -9,15 +9,14 @@ wheels/
 
 # Virtual environments
 .venv
+.env
+.env.*
+!.env.example
 
 # ocr records
 output/
 output.json
 var/jobs/
-
-# production deployment
-deploy/.env.production
-deploy/secrets/*
 
 # ide
 .vscode/

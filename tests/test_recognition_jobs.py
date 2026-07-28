@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from app_logging import APP_LOGGER_NAME, configure_logging
-from extractor.base_extractor import Problem
-from extractor.evaluator import EvaluationReport
-from pipeline import PageProcessingResult
-from recognition_jobs import (
+from exam_rec.app_logging import APP_LOGGER_NAME, configure_logging
+from exam_rec.extractor.base_extractor import Problem
+from exam_rec.extractor.evaluator import EvaluationReport
+from exam_rec.pipeline import PageProcessingResult
+from exam_rec.recognition_jobs import (
     JobNotCompleteError,
     JobNotFoundError,
     JobQueueFullError,

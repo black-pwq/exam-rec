@@ -8,9 +8,8 @@ services:
       context: .
       args:
         PADDLE_GROUP: paddle-cpu
-        VCS_REF: ${EXAM_REC_VCS_REF:-unknown}
     env_file:
-      - ./deploy/.env.production
+      - ./.env
     environment:
       EXAM_REC_JOB_ROOT: /data/jobs
       EXAM_REC_RUNTIME: cpu
@@ -23,12 +22,6 @@ services:
     init: true
     restart: unless-stopped
     stop_grace_period: 10m
-    healthcheck:
-      test: ["CMD", "python", "-m", "deploy.healthcheck"]
-      interval: 15s
-      timeout: 5s
-      start_period: 120s
-      retries: 4
     logging:
       driver: json-file
       options:

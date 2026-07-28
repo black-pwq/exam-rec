@@ -5,19 +5,24 @@ from typing import Any
 import pymupdf
 import pytest
 
-from extractor.base_extractor import OcrPage, Problem, ProblemExtractor
-from extractor.evaluator import EvaluationReport, ProblemEvaluator
-from extractor.regex_extractor import GeneralRegexExtractor, RegexPatterns
-from ocr.base_ocr import BaseOcr, OcrElement, Point
-from ocr.page_ocr import PageCachingOcr, PdfPageSource
-from pipeline import (
+from exam_rec.extractor.base_extractor import OcrPage, Problem, ProblemExtractor
+from exam_rec.extractor.evaluator import EvaluationReport, ProblemEvaluator
+from exam_rec.extractor.regex_extractor import GeneralRegexExtractor, RegexPatterns
+from exam_rec.ocr.base_ocr import BaseOcr, OcrElement, PersistingOcr, Point
+from exam_rec.ocr.page_ocr import (
+    CachedPageOcr,
+    PageCachingOcr,
+    PageOcrPageCountError,
+    PdfPageSource,
+)
+from exam_rec.pipeline import (
     InvalidProcessingRequestError,
     LowConfidenceExtractionError,
     ProblemProcessingPipeline,
     ProcessingPolicy,
     ProcessingRequest,
 )
-from question_range import (
+from exam_rec.question_range import (
     QuestionRangeResolver,
     QuestionStartDecision,
 )
@@ -59,6 +64,14 @@ class StubOcr(BaseOcr):
         finally:
             document.close()
         yield from self.pages[:page_count]
+
+
+class SequenceOcr(BaseOcr):
+    def __init__(self, pages: Iterable[OcrPage]) -> None:
+        self.pages = tuple(pages)
+
+    def predict_iter(self, input: Any) -> Iterator[OcrPage]:
+        yield from self.pages
 
 
 class FixedScoreEvaluator(ProblemEvaluator):
@@ -124,6 +137,15 @@ def test_request_rejects_invalid_and_overlapping_ranges(tmp_path) -> None:
         page_ocr=cached_ocr(path, StubOcr([[]] * 3))
     )
 
+    with pytest.raises(InvalidProcessingRequestError, match="must be a range"):
+        list(
+            pipeline.process_iter(
+                ProcessingRequest(
+                    path=path,
+                    questions=[0, 1],  # type: ignore[arg-type]
+                )
+            )
+        )
     with pytest.raises(InvalidProcessingRequestError, match="step 1"):
         list(pipeline.process_iter(request(path, range(0, 3, 2))))
     with pytest.raises(InvalidProcessingRequestError, match="non-empty"):
@@ -154,6 +176,50 @@ def test_request_rejects_invalid_and_overlapping_ranges(tmp_path) -> None:
                 )
             )
         )
+
+
+def test_pipeline_processes_cached_ocr_jsonl_without_opening_it_as_pdf(
+    tmp_path,
+) -> None:
+    persistence = tmp_path / "input.ocr.jsonl"
+    PersistingOcr(
+        SequenceOcr(
+            [
+                [element("first")],
+                [],
+                [element("third")],
+            ]
+        ),
+        persistence,
+    ).predict(None)
+    pipeline = ProblemProcessingPipeline(
+        page_ocr=CachedPageOcr(persistence),
+        evaluator=FixedScoreEvaluator(),
+        fixed_extractor_factories=(lambda: NamedExtractor("fixed"),),
+    )
+
+    result = pipeline.process(
+        ProcessingRequest(path=persistence, questions=range(0, 3))
+    )
+
+    assert [page.page_index for page in result.pages] == [0, 1, 2]
+    assert [problem.analysis for problem in result.problems] == ["fixed"]
+
+
+def test_pipeline_preserves_page_ocr_page_count_error(tmp_path) -> None:
+    path = tmp_path / "input.pdf"
+    make_pdf(path)
+    pipeline = ProblemProcessingPipeline(
+        page_ocr=cached_ocr(path, StubOcr([[]])),
+        evaluator=FixedScoreEvaluator(),
+        fixed_extractor_factories=(lambda: NamedExtractor("fixed"),),
+    )
+
+    with pytest.raises(PageOcrPageCountError) as mismatch:
+        pipeline.process(ProcessingRequest(path=path, questions=range(0, 3)))
+
+    assert mismatch.value.expected == 3
+    assert mismatch.value.actual == 1
 
 
 def test_uses_first_three_question_pages_and_only_ocrs_remaining_misses(
