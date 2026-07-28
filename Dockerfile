@@ -37,7 +37,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 RUN sed -i \
     's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
     /etc/apt/sources.list.d/debian.sources \
-    apt-get update \
+    && apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
         libgl1 \
