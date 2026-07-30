@@ -4,6 +4,7 @@ from base64 import b64encode
 from collections.abc import Iterator, Mapping
 from os import PathLike, environ, fspath
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import cv2
@@ -11,7 +12,11 @@ import numpy as np
 import pymupdf
 import requests
 
+from exam_rec.app_logging import get_logger
 from exam_rec.ocr.base_ocr import BaseOcr, OcrElement, Point
+
+
+logger = get_logger(__name__)
 
 
 class GlmOcr(BaseOcr):
@@ -70,19 +75,52 @@ class GlmOcr(BaseOcr):
         self._owns_session = session is None
 
     def predict_iter(self, input: Any) -> Iterator[list[OcrElement]]:
-        for file in self._file_values(input):
-            yield from self._predict_file(file)
+        for request_index, file in enumerate(self._file_values(input), start=1):
+            yield from self._predict_file(file, request_index=request_index)
 
-    def _predict_file(self, file: str) -> Iterator[list[OcrElement]]:
+    def _predict_file(
+        self,
+        file: str,
+        *,
+        request_index: int,
+    ) -> Iterator[list[OcrElement]]:
         payload = self._request_payload(file)
-        response = self.session.post(
-            self.endpoint,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=self.timeout,
+        logger.info(
+            "GLM-OCR request started: request_index=%d model=%s "
+            "file_value_chars=%d timeout_seconds=%s",
+            request_index,
+            self.model,
+            len(file),
+            self.timeout,
+        )
+        started = monotonic()
+        try:
+            response = self.session.post(
+                self.endpoint,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=self.timeout,
+            )
+        except requests.RequestException as error:
+            logger.warning(
+                "GLM-OCR request failed: request_index=%d model=%s "
+                "duration_seconds=%.3f error_type=%s",
+                request_index,
+                self.model,
+                monotonic() - started,
+                type(error).__name__,
+            )
+            raise
+        logger.info(
+            "GLM-OCR response received: request_index=%d model=%s "
+            "status_code=%d duration_seconds=%.3f",
+            request_index,
+            self.model,
+            response.status_code,
+            monotonic() - started,
         )
         try:
             response.raise_for_status()
