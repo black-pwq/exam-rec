@@ -20,7 +20,7 @@ from exam_rec.transform import (
     MapElements,
     TransformPipeline,
 )
-from exam_rec.utils.regex import RegexUtil
+from exam_rec.utils.regex import FULLWIDTH_TO_HALFWIDTH, RegexUtil
 
 OcrType = type[BaseOcr]
 
@@ -145,7 +145,7 @@ class OcrRegistry:
                 source,
                 TransformPipeline(
                     [
-                        FilterElements(lambda e: e.label == "text"),
+                        FilterElements(lambda element: element.label == "text"),
                         MapElements(
                             lambda element: replace(
                                 element,
@@ -153,11 +153,11 @@ class OcrRegistry:
                             )
                         ),
                         ReplaceText({"\n\n": "\n"}),
+                        ReplaceText(FULLWIDTH_TO_HALFWIDTH),
                         SplitMultilineElements(),
                     ]
                 ),
             )
-        return source
 
     def close(self) -> None:
         with self._lock:

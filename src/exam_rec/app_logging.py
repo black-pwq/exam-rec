@@ -54,4 +54,9 @@ def configure_logging() -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    return logging.getLogger(f"{APP_LOGGER_NAME}.{name}")
+    logger_name = (
+        name
+        if name == APP_LOGGER_NAME or name.startswith(f"{APP_LOGGER_NAME}.")
+        else f"{APP_LOGGER_NAME}.{name}"
+    )
+    return logging.getLogger(logger_name)

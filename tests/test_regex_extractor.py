@@ -268,6 +268,21 @@ def test_llm_analyzer_uses_supplied_sample_without_requiring_a_match() -> None:
     assert "extra_body" not in completions.request
 
 
+def test_llm_analyzer_prompt_requires_halfwidth_nongreedy_option_pattern() -> None:
+    prompt = LlmRegexAnalyzer._SYSTEM_PROMPT
+
+    assert "全角ASCII字符已经统一转换为半角" in prompt
+    assert "全角/半角二选一" in prompt
+    assert "text必须使用非贪婪匹配" in prompt
+    assert "一行一个选项" in prompt
+    assert "一行多个空格分隔的选项" in prompt
+    assert (
+        r"\s*(?P<label>[A-D])\.\s*(?P<text>.*?)(?=\s+[A-D]\.\s*|$)"
+        in prompt
+    )
+    assert "．" not in prompt
+
+
 def test_llm_analyzer_limits_sample_characters() -> None:
     response = json.dumps(
         {

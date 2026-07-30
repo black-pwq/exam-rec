@@ -101,8 +101,9 @@ def test_factory_uses_selected_builder_and_options(tmp_path) -> None:
     indexes = [2, 3, 4]
     ocr = factory.create("input.pdf", indexes)
 
-    assert isinstance(ocr, DummyOcr)
-    assert ocr.options == {"lang": "ch"}
+    assert isinstance(ocr, TransformedOcr)
+    assert isinstance(ocr.source, DummyOcr)
+    assert ocr.source.options == {"lang": "ch"}
     assert selector.page_indexes is indexes
 
 
@@ -146,9 +147,10 @@ def test_registry_lazily_reuses_one_instance_per_type() -> None:
     assert registry.get(DummyOcr) is dummy
     assert registry.get(PaddleOcr) is paddle
     assert calls == {DummyOcr: 1, PaddleOcr: 1}
-    assert isinstance(paddle, DummyOcr)
-    assert not isinstance(paddle, TransformedOcr)
-    assert paddle.options == {"backend": "paddle", "lang": "ch"}
+    assert isinstance(dummy, TransformedOcr)
+    assert isinstance(paddle, TransformedOcr)
+    assert isinstance(paddle.source, DummyOcr)
+    assert paddle.source.options == {"backend": "paddle", "lang": "ch"}
 
 
 def test_factory_reuses_registry_instance_across_files() -> None:
@@ -223,9 +225,24 @@ def test_registry_wraps_glm_with_multiline_split_and_forwards_close() -> None:
         "question",
         "A. first",
         "B. second",
-        "<tr>\n<td>value</td>",
     ]
 
     registry.close()
 
     assert source.closed
+
+
+def test_registry_normalizes_fullwidth_ascii_for_every_ocr_type() -> None:
+    class FullwidthOcr(BaseOcr):
+        def predict_iter(self, input: Any):
+            yield [
+                OcrElement(
+                    bbox=[],
+                    label="text",
+                    content="Ａ．答案：１２３　（测试）",
+                )
+            ]
+
+    ocr = OcrRegistry().get(FullwidthOcr)
+
+    assert ocr.predict(None)[0][0].content == "A.答案:123 (测试)"

@@ -409,10 +409,13 @@ class LlmRegexAnalyzer:
 options字段的规则会由提取器通过finditer在同一OCR文本元素中重复应用。该规则每次只匹配一个
 选项，不要编写一条覆盖整行A/B/C/D选项的正则，不要使用会阻止后续匹配的行首锚点^。
 label命名组直接捕获OCR中已有的选项标签，text命名组捕获该选项文本。
+text必须使用非贪婪匹配，并用正向先行断言在“空白字符加下一个选项标签”或字符串末尾停止，
+从而让同一正则既能识别一行一个选项，也能通过finditer识别一行多个选项。
 禁止使用label1、label2、label_2、text1、text2、text_2等编号命名组。
 
-正确示例：(?P<label>[A-D])[.．]\s*(?P<text>.*?)(?=\s*[A-D][.．]|$)
-错误示例：(?P<label1>A)[.．](?P<text1>.*?)(?P<label2>B)[.．](?P<text2>.*)
+正确示例：\s*(?P<label>[A-D])\.\s*(?P<text>.*?)(?=\s+[A-D]\.\s*|$)
+错误示例：(?P<label>[A-D])\.\s*(?P<text>.*)
+错误示例：(?P<label1>A)\.(?P<text1>.*?)(?P<label2>B)\.(?P<text2>.*)
 
 不要自己添加除number、question、label、text和answer之外的其他命名组。"""
 
