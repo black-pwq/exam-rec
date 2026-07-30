@@ -13,7 +13,12 @@ dependencies = [
 	"uvicorn>=0.34,<1",
 	"python-multipart>=0.0.20,<1",
 	"python-dotenv>=1.1,<2",
+	"requests>=2.32,<3",
 ]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.10"]
+build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -31,7 +36,7 @@ paddlepaddle = { index = "paddle-cpu" }
 paddlepaddle-gpu = { index = "paddle-cu118" }
 
 [tool.uv]
-package = false
+package = true
 default-groups = ["dev", "paddle-cpu"]
 conflicts = [
     [

@@ -142,6 +142,22 @@ def test_transformed_ocr_applies_transform_lazily() -> None:
     assert next(iterator)[0].content == "B. second"
 
 
+def test_transformed_ocr_forwards_close_to_source() -> None:
+    class CloseableOcr(StubOcr):
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    source = CloseableOcr()
+    ocr = TransformedOcr(source, ReplaceText({}))
+
+    ocr.close()
+
+    assert source.closed
+
+
 def test_transformed_ocr_applies_absolute_region_filter() -> None:
     ocr = TransformedOcr(
         TwoPageOcr(),

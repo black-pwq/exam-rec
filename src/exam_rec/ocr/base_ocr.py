@@ -90,3 +90,8 @@ class TransformedOcr(BaseOcr):
     def predict_iter(self, input: Any) -> Iterator[list[OcrElement]]:
         for elements in self.source.predict_iter(input):
             yield self.transform.transform(elements)
+
+    def close(self) -> None:
+        close = getattr(self.source, "close", None)
+        if close is not None:
+            close()

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from os import PathLike, fspath
 from pathlib import Path
 from threading import Lock
@@ -12,8 +12,15 @@ import pymupdf
 from exam_rec.ocr.base_ocr import BaseOcr, TransformedOcr
 from exam_rec.ocr.page_ocr import PageCachingOcr, PdfPageSource
 from exam_rec.ocr.pymu_ocr import PyMuPDFOcr
-from exam_rec.transform import MergeCollinearElements
-
+from exam_rec.transform import (
+    MergeCollinearElements,
+    SplitMultilineElements,
+    ReplaceText,
+    FilterElements,
+    MapElements,
+    TransformPipeline,
+)
+from exam_rec.utils.regex import RegexUtil
 
 OcrType = type[BaseOcr]
 
@@ -33,6 +40,7 @@ class PdfTextLayerSelector:
     max_sample_pages: int = 5
     min_chars_per_page: int = 20
     min_text_page_ratio: float = 0.5
+    fallback_ocr_type: OcrType | None = None
 
     def __post_init__(self) -> None:
         if self.max_sample_pages < 1:
@@ -56,7 +64,7 @@ class PdfTextLayerSelector:
             if document.needs_pass:
                 raise ValueError(f"OCR input file is password protected: {source}")
             if not document.is_pdf or document.page_count == 0:
-                return self._paddle_type()
+                return self._fallback_type()
 
             if page_indexes is None:
                 selected_indexes = self._sample_page_indexes(document.page_count)
@@ -65,18 +73,15 @@ class PdfTextLayerSelector:
                 if not selected_indexes:
                     raise ValueError("page_indexes must not be empty")
                 if any(
-                    not isinstance(index, int)
-                    or index < 0
-                    or index >= document.page_count
+                    not isinstance(index, int) or index < 0 or index >= document.page_count
                     for index in selected_indexes
                 ):
                     raise ValueError("page_indexes contains an invalid PDF page index")
             text_page_count = sum(
-                self._has_meaningful_text(document[index])
-                for index in selected_indexes
+                self._has_meaningful_text(document[index]) for index in selected_indexes
             )
             ratio = text_page_count / len(selected_indexes)
-            return PyMuPDFOcr if ratio >= self.min_text_page_ratio else self._paddle_type()
+            return PyMuPDFOcr if ratio >= self.min_text_page_ratio else self._fallback_type()
         finally:
             document.close()
 
@@ -90,17 +95,15 @@ class PdfTextLayerSelector:
         if sample_count == 1:
             return [0]
         return sorted(
-            {
-                round(index * (page_count - 1) / (sample_count - 1))
-                for index in range(sample_count)
-            }
+            {round(index * (page_count - 1) / (sample_count - 1)) for index in range(sample_count)}
         )
 
-    @staticmethod
-    def _paddle_type() -> OcrType:
-        from exam_rec.ocr.paddle_ocr import PaddleOcr
+    def _fallback_type(self) -> OcrType:
+        if self.fallback_ocr_type is not None:
+            return self.fallback_ocr_type
+        from exam_rec.ocr.glm_ocr import GlmOcr
 
-        return PaddleOcr
+        return GlmOcr
 
 
 OcrBuilder = Callable[[], BaseOcr]
@@ -135,6 +138,25 @@ class OcrRegistry:
         source = builder() if builder is not None else ocr_type()
         if issubclass(ocr_type, PyMuPDFOcr):
             return TransformedOcr(source, MergeCollinearElements())
+        from exam_rec.ocr.glm_ocr import GlmOcr
+
+        if issubclass(ocr_type, GlmOcr):
+            return TransformedOcr(
+                source,
+                TransformPipeline(
+                    [
+                        FilterElements(lambda e: e.label == "text"),
+                        MapElements(
+                            lambda element: replace(
+                                element,
+                                content=RegexUtil.replace_circled(element.content),
+                            )
+                        ),
+                        ReplaceText({"\n\n": "\n"}),
+                        SplitMultilineElements(),
+                    ]
+                ),
+            )
         return source
 
     def close(self) -> None:

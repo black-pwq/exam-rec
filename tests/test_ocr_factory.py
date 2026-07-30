@@ -6,6 +6,7 @@ import pymupdf
 import pytest
 
 from exam_rec.ocr.base_ocr import BaseOcr, OcrElement, Point, TransformedOcr
+from exam_rec.ocr.glm_ocr import GlmOcr
 from exam_rec.ocr.ocr_factory import (
     OcrFactory,
     OcrRegistry,
@@ -41,11 +42,12 @@ def test_selector_chooses_pymupdf_for_meaningful_text_layer(tmp_path) -> None:
     assert PdfTextLayerSelector().select(path) is PyMuPDFOcr
 
 
-def test_selector_chooses_paddle_for_scanned_or_sparse_pdf(tmp_path) -> None:
+def test_selector_chooses_configured_fallback_for_sparse_pdf(tmp_path) -> None:
     path = tmp_path / "scanned.pdf"
     make_pdf(path, [None, "page 2", None])
+    selector = PdfTextLayerSelector(fallback_ocr_type=DummyOcr)
 
-    assert PdfTextLayerSelector().select(path) is PaddleOcr
+    assert selector.select(path) is DummyOcr
 
 
 def test_selector_only_checks_requested_pages(tmp_path) -> None:
@@ -59,8 +61,10 @@ def test_selector_only_checks_requested_pages(tmp_path) -> None:
         ],
     )
 
-    assert PdfTextLayerSelector().select(path, [0]) is PyMuPDFOcr
-    assert PdfTextLayerSelector().select(path, [1, 2]) is PaddleOcr
+    selector = PdfTextLayerSelector(fallback_ocr_type=DummyOcr)
+
+    assert selector.select(path, [0]) is PyMuPDFOcr
+    assert selector.select(path, [1, 2]) is DummyOcr
 
 
 def test_selector_rejects_missing_file(tmp_path) -> None:
@@ -181,3 +185,47 @@ def test_registry_wraps_pymupdf_with_collinear_merge() -> None:
 
     assert isinstance(ocr, TransformedOcr)
     assert [item.content for item in ocr.predict(None)[0]] == ["left right"]
+
+
+def test_registry_wraps_glm_with_multiline_split_and_forwards_close() -> None:
+    class GlmStub(GlmOcr):
+        def __init__(self) -> None:
+            self.closed = False
+
+        def predict_iter(self, input: Any):
+            yield [
+                OcrElement(
+                    bbox=[
+                        Point(0, 0),
+                        Point(100, 0),
+                        Point(100, 30),
+                        Point(0, 30),
+                    ],
+                    label="text",
+                    content="question\nA. first\nB. second",
+                ),
+                OcrElement(
+                    bbox=[],
+                    label="table",
+                    content="<tr>\n<td>value</td>",
+                ),
+            ]
+
+        def close(self) -> None:
+            self.closed = True
+
+    source = GlmStub()
+    registry = OcrRegistry({GlmStub: lambda: source})
+    ocr = registry.get(GlmStub)
+
+    assert isinstance(ocr, TransformedOcr)
+    assert [item.content for item in ocr.predict(None)[0]] == [
+        "question",
+        "A. first",
+        "B. second",
+        "<tr>\n<td>value</td>",
+    ]
+
+    registry.close()
+
+    assert source.closed

@@ -84,6 +84,83 @@ class FilterElements:
         return [element for element in elements if self.predicate(element)]
 
 
+class SplitMultilineElements:
+    """Split multiline element content into ordered line-level elements."""
+
+    _LINE_ENDINGS = (
+        "\n",
+        "\r",
+        "\v",
+        "\f",
+        "\x1c",
+        "\x1d",
+        "\x1e",
+        "\x85",
+        "\u2028",
+        "\u2029",
+    )
+
+    def __init__(
+        self,
+        *,
+        labels: Sequence[str] = ("text",),
+        keep_empty: bool = False,
+    ) -> None:
+        self.labels = frozenset(labels)
+        self.keep_empty = keep_empty
+
+    def transform(self, elements: OcrPage) -> OcrPage:
+        result: OcrPage = []
+        for element in elements:
+            if element.label in self.labels:
+                result.extend(self._split(element))
+            else:
+                result.append(element)
+        return result
+
+    def _split(self, element: OcrElement) -> list[OcrElement]:
+        lines = element.content.splitlines()
+        if element.content.endswith(self._LINE_ENDINGS):
+            lines.append("")
+        if len(lines) <= 1:
+            return [element]
+
+        line_boxes = self._line_boxes(
+            element,
+            _element_bounds(element),
+            len(lines),
+        )
+        return [
+            OcrElement(
+                bbox=line_boxes[index],
+                label=element.label,
+                content=line,
+            )
+            for index, line in enumerate(lines)
+            if self.keep_empty or line.strip()
+        ]
+
+    @staticmethod
+    def _line_boxes(
+        element: OcrElement,
+        bounds: tuple[float, float, float, float] | None,
+        line_count: int,
+    ) -> list[list[Point]]:
+        if bounds is None:
+            return [list(element.bbox) for _ in range(line_count)]
+        x0, y0, x1, y1 = bounds
+        line_height = (y1 - y0) / line_count
+        return [
+            _rectangle_points(
+                x0,
+                y0 + line_height * index,
+                x1,
+                y0 + line_height * (index + 1),
+            )
+            for index in range(line_count)
+        ]
+
+
 @dataclass(frozen=True)
 class PageRegion:
     x0: float

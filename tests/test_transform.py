@@ -11,6 +11,7 @@ from exam_rec.transform import (
     RemoveElementsInRegions,
     RemoveText,
     ReplaceText,
+    SplitMultilineElements,
     TransformPipeline,
     TwoColumnLayout,
     cluster_ocr_elements_by_x,
@@ -75,6 +76,70 @@ def test_remove_text_preserves_elements_left_empty() -> None:
     result = RemoveText(["禁止商用"]).transform(elements)
 
     assert [item.content for item in result] == ["", "正文"]
+
+
+def test_split_multiline_elements_creates_line_level_boxes() -> None:
+    source = element("question\nA. first\nB. second", 10, y=100, width=490, height=90)
+
+    result = SplitMultilineElements().transform([source])
+
+    assert [item.content for item in result] == [
+        "question",
+        "A. first",
+        "B. second",
+    ]
+    assert [item.bbox for item in result] == [
+        [Point(10, 100), Point(500, 100), Point(500, 130), Point(10, 130)],
+        [Point(10, 130), Point(500, 130), Point(500, 160), Point(10, 160)],
+        [Point(10, 160), Point(500, 160), Point(500, 190), Point(10, 190)],
+    ]
+
+
+def test_split_multiline_elements_keeps_empty_line_position() -> None:
+    source = element("first\n\nthird", 0, y=0, width=40, height=30)
+
+    result = SplitMultilineElements().transform([source])
+
+    assert [item.content for item in result] == ["first", "third"]
+    assert [item.bbox for item in result] == [
+        [Point(0, 0), Point(40, 0), Point(40, 10), Point(0, 10)],
+        [Point(0, 20), Point(40, 20), Point(40, 30), Point(0, 30)],
+    ]
+
+
+def test_split_multiline_elements_can_keep_empty_lines() -> None:
+    source = OcrElement(
+        bbox=[],
+        label="text",
+        content="first\r\n\r\nthird",
+    )
+
+    result = SplitMultilineElements(keep_empty=True).transform([source])
+
+    assert [item.content for item in result] == ["first", "", "third"]
+    assert all(item.bbox == [] for item in result)
+
+
+def test_split_multiline_elements_only_processes_configured_labels() -> None:
+    table = OcrElement(bbox=[], label="table", content="<tr>\n<td>value</td>")
+    formula = OcrElement(bbox=[], label="formula", content="a\nb")
+
+    result = SplitMultilineElements(labels=("formula",)).transform([table, formula])
+
+    assert result == [
+        table,
+        OcrElement(bbox=[], label="formula", content="a"),
+        OcrElement(bbox=[], label="formula", content="b"),
+    ]
+
+
+def test_split_multiline_elements_preserves_single_line_identity() -> None:
+    source = element("single line", 10)
+
+    result = SplitMultilineElements().transform([source])
+
+    assert result == [source]
+    assert result[0] is source
 
 
 def test_removes_elements_in_absolute_page_regions() -> None:
