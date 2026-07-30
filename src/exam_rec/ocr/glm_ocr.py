@@ -25,6 +25,7 @@ class GlmOcr(BaseOcr):
     DEFAULT_ENDPOINT = "https://open.bigmodel.cn/api/paas/v4/layout_parsing"
     MAX_PDF_BYTES = 50 * 1024 * 1024
     MAX_PDF_PAGES = 100
+    PDF_BATCH_PAGES = 20
     MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
     def __init__(
@@ -206,16 +207,21 @@ class GlmOcr(BaseOcr):
                 raise ValueError("GlmOcr input PDF is password protected")
             if document.page_count == 0:
                 raise ValueError("GlmOcr input PDF must not be empty")
+            page_limit = min(cls.PDF_BATCH_PAGES, cls.MAX_PDF_PAGES)
             if (
                 len(content) <= cls.MAX_PDF_BYTES
-                and document.page_count <= cls.MAX_PDF_PAGES
+                and document.page_count <= page_limit
             ):
                 yield cls._data_uri(content, "application/pdf")
                 return
 
             start = 0
             while start < document.page_count:
-                end, chunk = cls._largest_pdf_chunk(document, start)
+                end, chunk = cls._largest_pdf_chunk(
+                    document,
+                    start,
+                    page_limit=page_limit,
+                )
                 yield cls._data_uri(chunk, "application/pdf")
                 start = end
         finally:
@@ -223,13 +229,17 @@ class GlmOcr(BaseOcr):
 
     @classmethod
     def _largest_pdf_chunk(
-        cls, document: Any, start: int
+        cls,
+        document: Any,
+        start: int,
+        *,
+        page_limit: int,
     ) -> tuple[int, bytes]:
         chunk = pymupdf.open()
         accepted = b""
         accepted_end = start
         try:
-            stop = min(document.page_count, start + cls.MAX_PDF_PAGES)
+            stop = min(document.page_count, start + page_limit)
             for page_index in range(start, stop):
                 chunk.insert_pdf(
                     document,

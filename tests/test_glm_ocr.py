@@ -157,7 +157,7 @@ def test_large_page_count_pdf_is_split_and_page_order_is_preserved(
     pdf = document.tobytes()
     document.close()
     session = FakeSession(FakeResponse(result([])))
-    monkeypatch.setattr(GlmOcr, "MAX_PDF_PAGES", 1)
+    monkeypatch.setattr(GlmOcr, "PDF_BATCH_PAGES", 1)
 
     assert GlmOcr(api_key="key", session=session).predict(pdf) == [[], []]
     assert len(session.requests) == 2
@@ -187,6 +187,26 @@ def test_large_pdf_bytes_are_split(monkeypatch) -> None:
 
     assert GlmOcr(api_key="key", session=session).predict(pdf) == [[], []]
     assert len(session.requests) == 2
+
+
+def test_pdf_uses_twenty_page_operational_batches() -> None:
+    document = pymupdf.open()
+    for _ in range(45):
+        document.new_page()
+    pdf = document.tobytes()
+    document.close()
+
+    values = list(GlmOcr._file_values(pdf))
+    page_counts = []
+    for value in values:
+        chunk = b64decode(value.split(",", 1)[1])
+        chunk_document = pymupdf.open(stream=chunk, filetype="pdf")
+        try:
+            page_counts.append(chunk_document.page_count)
+        finally:
+            chunk_document.close()
+
+    assert page_counts == [20, 20, 5]
 
 
 def test_uses_environment_api_key(monkeypatch) -> None:
